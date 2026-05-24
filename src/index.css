@@ -1,0 +1,121 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+:root {
+  --brand-bg: #020408;
+  --brand-card: #0A0C10;
+  --brand-border: rgba(255, 255, 255, 0.06);
+  --brand-text-white: #ffffff;
+  --brand-text-primary: #ffffff;
+  --brand-text-secondary: #9ca3af;
+  --brand-text-muted: #6b7280;
+  --brand-bg-white-ops: rgba(255, 255, 255, 0.05);
+  --brand-bg-white-ops-hover: rgba(255, 255, 255, 0.1);
+}
+
+:root.light {
+  --brand-bg: #f8fafc;
+  --brand-card: #ffffff;
+  --brand-border: rgba(0, 0, 0, 0.08);
+  --brand-text-white: #ffffff;
+  --brand-text-primary: #1e293b;
+  --brand-text-secondary: #64748b;
+  --brand-text-muted: #94a3b8;
+  --brand-bg-white-ops: rgba(0, 0, 0, 0.03);
+  --brand-bg-white-ops-hover: rgba(0, 0, 0, 0.06);
+}
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-brand-bg: var(--brand-bg);
+  --color-brand-card: var(--brand-card);
+  --color-brand-border: var(--brand-border);
+  --color-brand-text-primary: var(--brand-text-primary);
+  --color-brand-text-secondary: var(--brand-text-secondary);
+  --color-brand-purple: #9333EA;
+  --color-brand-blue: #2563EB;
+  --color-brand-cyan: #22D3EE;
+  --color-brand-emerald: #10B981;
+}
+
+@layer base {
+  body {
+    @apply bg-brand-bg text-[var(--brand-text-secondary)] antialiased selection:bg-brand-purple/30 font-sans transition-colors duration-300;
+  }
+}
+
+@layer components {
+  .saas-card {
+    @apply bg-brand-card border border-brand-border rounded-xl transition-all duration-200 shadow-sm;
+  }
+  
+  .saas-button-primary {
+    @apply px-4 py-2 bg-brand-purple text-white font-semibold rounded-lg hover:bg-brand-purple/90 active:scale-95 transition-all shadow-sm;
+  }
+
+  .saas-button-secondary {
+    @apply px-4 py-2 bg-[var(--brand-bg-white-ops)] border border-brand-border text-[var(--brand-text-primary)] font-medium rounded-lg hover:bg-[var(--brand-bg-white-ops-hover)] active:scale-95 transition-all;
+  }
+
+  .saas-input {
+    @apply bg-[var(--brand-bg-white-ops)] border border-brand-border rounded-lg px-4 py-2 text-[var(--brand-text-primary)] placeholder:text-gray-500 focus:border-brand-purple/50 focus:ring-4 focus:ring-brand-purple/10 outline-none transition-all;
+  }
+
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all;
+  }
+
+  .nav-item-active {
+    @apply bg-[var(--brand-bg-white-ops)] text-[var(--brand-text-primary)] border border-brand-border shadow-sm;
+  }
+
+  .nav-item-inactive {
+    @apply text-[var(--brand-text-secondary)] hover:text-[var(--brand-text-primary)] hover:bg-[var(--brand-bg-white-ops)];
+  }
+}
+
+/* Custom scrollbar for a pro look */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Animated Breathing effect for Academic Standing card */
+@keyframes academic-breathing {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.08);
+  }
+  50% {
+    transform: scale(1.008);
+    box-shadow: 0 4px 20px 4px rgba(34, 211, 238, 0.2);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.08);
+  }
+}
+
+.academic-standing-card {
+  animation: academic-breathing 5s ease-in-out infinite;
+  transition: all 0.3s ease-in-out;
+}
+
+.academic-standing-card:hover {
+  animation-play-state: paused;
+  transform: scale(1.015);
+  box-shadow: 0 8px 24px 6px rgba(147, 51, 234, 0.3);
+  border-color: rgba(147, 51, 234, 0.3) !important;
+}
+

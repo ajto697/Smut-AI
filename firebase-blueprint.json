@@ -1,0 +1,78 @@
+{
+  "entities": {
+    "student": {
+      "title": "Student",
+      "description": "Student profile and credentials data.",
+      "type": "object",
+      "properties": {
+        "mssv": { "type": "string", "description": "Student ID" },
+        "name": { "type": "string", "description": "Full name" },
+        "email": { "type": "string", "description": "Email address" },
+        "password": { "type": "string", "description": "Encoded password or pin" },
+        "phone": { "type": "string", "description": "Contact phone" },
+        "major": { "type": "string", "description": "Field of study" },
+        "status": { "type": "string", "enum": ["active", "suspended"] },
+        "isVerified": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["mssv", "name", "password"]
+    },
+    "chat": {
+      "title": "Chat Message",
+      "description": "Secure chat logs for a student.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "content": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "role", "content", "timestamp"]
+    },
+    "notification": {
+      "title": "Notification",
+      "description": "Student notification record.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["deadline", "event", "system"] },
+        "isRead": { "type": "boolean" },
+        "timestamp": { "type": "integer" }
+      },
+      "required": ["studentId", "title", "message", "type", "isRead", "timestamp"]
+    },
+    "calendarEvent": {
+      "title": "Calendar Event",
+      "description": "Important academic dates and deadlines.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "type": { "type": "string", "enum": ["exam", "registration", "holiday", "event"] },
+        "priority": { "type": "string", "enum": ["high", "medium", "low"] }
+      },
+      "required": ["title", "date", "type"]
+    }
+  },
+  "firestore": {
+    "/students/{studentId}": {
+      "schema": "student",
+      "description": "Collection of student profiles."
+    },
+    "/chats/{chatId}": {
+      "schema": "chat",
+      "description": "Individual chat messages."
+    },
+    "/notifications/{notificationId}": {
+      "schema": "notification",
+      "description": "Student notifications collection."
+    },
+    "/calendarEvents/{eventId}": {
+      "schema": "calendarEvent",
+      "description": "Global academic calendar events."
+    }
+  }
+}
