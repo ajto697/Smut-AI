@@ -1,6 +1,6 @@
 {
-  "name": "SMUT High-Security Student Portal",
-  "description": "Hệ thống quản lý và hỗ trợ sinh viên bảo mật cao của Đại học Công nghệ Sao Mai, tích hợp xác thực đa nhân tố và chatbot AI.",
+  "name": "Scholar Owl - Smart Student Portal",
+  "description": "Hệ thống quản lý học tập số, hỗ trợ sinh viên, luyện thi trắc nghiệm Azota AI, chấm bài luận tự động và theo dõi điểm rèn luyện.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

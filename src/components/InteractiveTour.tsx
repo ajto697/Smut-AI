@@ -24,7 +24,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     selector: '.academic-standing-card',
     title: 'Điểm Số & Xếp Hạng Gương Mẫu',
-    content: 'Theo dõi điểm trung bình tích lũy CGPA (thang 4.0), số tín chỉ đã vượt qua và xếp hạng danh dự của bạn tại Sao Mai (SMUT).',
+    content: 'Theo dõi điểm trung bình tích lũy CGPA (thang 4.0), số tín chỉ đã vượt qua và xếp hạng danh dự của bạn tại Cổng Học Tập Số.',
     position: 'bottom',
   },
   {

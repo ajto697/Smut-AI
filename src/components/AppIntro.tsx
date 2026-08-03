@@ -9,8 +9,8 @@ interface AppIntroProps {
 
 const INTRO_SLIDES = [
   {
-    title: 'Trợ Lý Vạn Năng SMUT AI 🦉',
-    description: 'Chào mừng bạn đến với Đại học Công nghệ Sao Mai! Tớ là Cú thông minh – người bạn đồng hành 24/7 giúp bạn làm thủ tục, tra cứu phòng học, xem học phí và giải đáp mọi thắc mắc hành chính.',
+    title: 'Trợ Lý Học Tập Cú AI 🦉',
+    description: 'Chào mừng bạn đến với Cổng Học Tập Số! Tớ là Cú thông minh – người bạn đồng hành 24/7 giúp bạn làm thủ tục, tra cứu phòng học, xem học phí và giải đáp mọi thắc mắc hành chính.',
     icon: '🚀',
     accentColor: 'from-brand-purple to-indigo-500',
   },

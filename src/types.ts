@@ -92,3 +92,14 @@ export interface DailyCareState {
   checkInTime: number;
   interactionCount: number;
 }
+
+export interface DocumentAnalysisResult {
+  summary: string;
+  keywords: {
+    term: string;
+    definition: string;
+    example: string;
+    importance: 'Cốt lõi' | 'Quan trọng' | 'Mở rộng';
+  }[];
+}
+

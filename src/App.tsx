@@ -11,7 +11,7 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Message, Student, Notification, CalendarEvent } from './types';
-import { getChatResponse } from './services/geminiService';
+import { getChatResponse, generateLoginGreeting, generateDashboardGreeting } from './services/geminiService';
 import { SMUT_DATA } from './constants';
 import { auth } from './firebase';
 import { signOut } from 'firebase/auth';
@@ -28,6 +28,35 @@ import { DailyCareTracker } from './components/DailyCareTracker';
 import { Compass } from 'lucide-react';
 
 // --- Components ---
+
+const highlightVietnameseTerms = (text: string) => {
+  if (!text) return "";
+  let formatted = text;
+  
+  // Custom keyword highlighting to add visual splash
+  formatted = formatted.replace(
+    /(lịch học vụ|lịch trình học vụ|lịch học)/gi, 
+    '<span class="text-brand-purple font-extrabold">$1</span>'
+  );
+  formatted = formatted.replace(
+    /(màu tím)/gi, 
+    '<span class="text-brand-purple font-extrabold">$1</span>'
+  );
+  formatted = formatted.replace(
+    /(điểm rèn luyện|rèn luyện tốt|rèn luyện)/gi, 
+    '<span class="text-brand-emerald font-extrabold">$1</span>'
+  );
+  formatted = formatted.replace(
+    /(GPA|viên điểm số|vũ trụ điểm số|điểm số|học bổng)/gi, 
+    '<span class="text-brand-cyan font-extrabold">$1</span>'
+  );
+  formatted = formatted.replace(
+    /(MSSV|OTP)/g, 
+    '<span class="text-amber-400 font-extrabold">$1</span>'
+  );
+
+  return <span dangerouslySetInnerHTML={{ __html: formatted }} />;
+};
 
 const Logo = ({ size = 32, className = "" }: { size?: number, className?: string }) => (
   <svg 
@@ -108,21 +137,31 @@ const Logo = ({ size = 32, className = "" }: { size?: number, className?: string
 );
 
 const LoginFlyingOwl = () => {
-  const [message, setMessage] = useState("Hi! Tớ là Cú SMUT AI đây! 🦉");
+  const [message, setMessage] = useState("Đang kết nối vũ trụ học thuật... 🦉🌌");
   const [clickCount, setClickCount] = useState(0);
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  const messages = [
-    "Hi! Tớ là Cú SMUT AI đây! 🦉",
-    "Mách nhỏ: Đăng nhập bằng MSSV 25010001 để trải nghiệm lập tức nha!",
-    "Bấm vào tớ thử đi, tớ hứa sẽ có món quà bất ngờ đó! ✨",
-    "Cú học tập Azota & tính năng sinh đề thi đỉnh cao tự động đang chờ bạn!",
-    "Hôm nay bạn học tập thế nào rồi? Trực tuyến hay offline? 🧠",
-  ];
+  const fetchGreeting = async () => {
+    setIsGenerating(true);
+    try {
+      const response = await generateLoginGreeting();
+      setMessage(response);
+    } catch (e) {
+      setMessage("Hú hú! 🦉 Nhập ngay MSSV và OTP để cùng mình khám phá vũ trụ điểm số nhé!");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchGreeting();
+  }, []);
 
   const handleMascotClick = () => {
+    if (isGenerating) return;
     setClickCount(prev => prev + 1);
-    const nextMsgIdx = (clickCount + 1) % messages.length;
-    setMessage(messages[nextMsgIdx]);
+    setMessage("Cú đang bay tìm câu chúc mới... 🔮");
+    fetchGreeting();
   };
 
   return (
@@ -427,6 +466,32 @@ export default function App() {
   const [student, setStudent] = useState<Student | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+
+  const [dashboardGreeting, setDashboardGreeting] = useState('');
+  const [isGeneratingDashboardGreeting, setIsGeneratingDashboardGreeting] = useState(false);
+
+  const fetchDashboardMascotGreeting = async (selectedStudent: Student | null = student) => {
+    if (!selectedStudent) return;
+    setIsGeneratingDashboardGreeting(true);
+    try {
+      const role = selectedStudent.mssv === "25010001" 
+        ? "Lớp trưởng lớp Sư phạm Toán học K25, bảo bối đắc lực quản lý 61 thành viên"
+        : "Cán sự học vụ tài năng, đang theo sát 52 thành viên học tập";
+        
+      const greeting = await generateDashboardGreeting(selectedStudent.name, selectedStudent.major, role);
+      setDashboardGreeting(greeting);
+    } catch (e) {
+      setDashboardGreeting(`Chào ngày mới, ${selectedStudent.name.split(' ')[0]}! 🦉 Hãy chuẩn bị thật tốt bằng cách xem thêm lịch học vụ màu Tím và theo dõi rèn luyện nhé!`);
+    } finally {
+      setIsGeneratingDashboardGreeting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (student && !dashboardGreeting) {
+      fetchDashboardMascotGreeting(student);
+    }
+  }, [student]);
   const [isEditing, setIsEditing] = useState(false);
   const [editedStudent, setEditedStudent] = useState<Student | null>(null);
   const [mssvInput, setMssvInput] = useState('');
@@ -703,7 +768,7 @@ export default function App() {
               <div className="absolute inset-0 bg-brand-cyan/5 blur-2xl rounded-full" />
               <Logo size={48} />
             </div>
-            <h1 className="text-2xl font-bold text-brand-text-primary tracking-tight">SMUT Assistant</h1>
+            <h1 className="text-2xl font-bold text-brand-text-primary tracking-tight">Scholar Owl Portal</h1>
             <p className="text-xs text-brand-text-secondary font-bold uppercase tracking-[0.2em] mt-1">Universal Education Dashboard</p>
           </div>
 
@@ -763,7 +828,7 @@ export default function App() {
         <div className="p-6">
           <div className="flex items-center gap-3 mb-8">
             <Logo size={28} />
-            <span className="text-sm font-bold text-white tracking-tighter uppercase">SMUT AI</span>
+            <span className="text-sm font-bold text-white tracking-tighter uppercase">Scholar Owl</span>
           </div>
           
           <div className="space-y-1">
@@ -926,7 +991,7 @@ export default function App() {
           <div className="flex-1 overflow-y-auto px-8 py-8 space-y-8 no-scrollbar study-owl-azota-section">
             <div className="max-w-5xl mx-auto space-y-8">
               <div>
-                <p className="text-[10px] font-bold text-brand-purple uppercase tracking-[0.3em] mb-2">Học tập đỉnh cao tại SMUT 🦉</p>
+                <p className="text-[10px] font-bold text-brand-purple uppercase tracking-[0.3em] mb-2">Học tập đỉnh cao 🦉</p>
                 <h2 className="text-4xl font-extrabold text-white tracking-tighter">Trợ Lý Cú Học Tập (Azota)</h2>
               </div>
               <StudyOwlAzota studentName={student?.name} />
@@ -999,6 +1064,52 @@ export default function App() {
                 <div className="text-right">
                   <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Current Semester</p>
                   <p className="text-sm font-bold text-brand-text-primary uppercase">Học kỳ 2 · 2025-2026</p>
+                </div>
+              </div>
+
+              {/* SMUT AI Flying Owl Mascot */}
+              <div className="saas-card p-5 bg-gradient-to-r from-brand-purple/15 to-brand-cyan/15 border border-brand-purple/20 rounded-2xl relative overflow-hidden flex flex-col md:flex-row items-center gap-5">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-brand-purple/20 rounded-full blur-2xl pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-24 h-24 bg-brand-cyan/20 rounded-full blur-2xl pointer-events-none" />
+                
+                <motion.div 
+                  animate={{ y: [0, -6, 0] }}
+                  transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                  className="shrink-0 p-3 bg-[#0d1222]/80 border border-brand-cyan/25 rounded-xl relative shadow-lg flex items-center justify-center text-4xl cursor-pointer group hover:border-brand-purple/40 transition-colors"
+                  onClick={() => fetchDashboardMascotGreeting(student)}
+                >
+                  <span className="animate-bounce select-none">🦉</span>
+                  <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-cyan opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-brand-cyan"></span>
+                  </span>
+                </motion.div>
+
+                <div className="space-y-1.5 flex-1 relative z-10 text-center md:text-left">
+                  <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+                    <span className="text-[10px] font-mono tracking-widest font-bold text-brand-purple uppercase">Scholar Owl Mascot</span>
+                    <span className="px-1.5 py-0.5 text-[8px] font-extrabold uppercase bg-brand-cyan/10 border border-brand-cyan/25 text-brand-cyan rounded">Trợ lý đồng hành 🌟</span>
+                  </div>
+                  
+                  {isGeneratingDashboardGreeting ? (
+                    <p className="text-xs text-gray-400 italic">Cú Flying Owl đang kết nối hệ thống để chuẩn bị lời chúc... 🔮</p>
+                  ) : (
+                    <p className="text-xs font-semibold text-gray-200 leading-relaxed italic">
+                      "{highlightVietnameseTerms(dashboardGreeting)}"
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex md:flex-col gap-2 shrink-0">
+                  <button 
+                    onClick={() => fetchDashboardMascotGreeting(student)}
+                    disabled={isGeneratingDashboardGreeting}
+                    className="p-2 bg-white/5 border border-white/10 hover:border-brand-purple/35 hover:bg-white/10 rounded-xl text-xs font-bold text-white transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-95 animate-pulse hover:animate-none"
+                    title="Nói câu nữa đi Cú"
+                  >
+                    <Stars size={13} className="text-brand-purple" />
+                    <span className="md:hidden">Nói câu nữa đi Cú</span>
+                  </button>
                 </div>
               </div>
 
