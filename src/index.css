@@ -1,32 +1,33 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 :root {
-  --brand-bg: #020408;
-  --brand-card: #0A0C10;
-  --brand-border: rgba(255, 255, 255, 0.06);
+  --brand-bg: #030509;
+  --brand-card: #070a10;
+  --brand-border: rgba(255, 255, 255, 0.08);
   --brand-text-white: #ffffff;
   --brand-text-primary: #ffffff;
-  --brand-text-secondary: #9ca3af;
-  --brand-text-muted: #6b7280;
-  --brand-bg-white-ops: rgba(255, 255, 255, 0.05);
-  --brand-bg-white-ops-hover: rgba(255, 255, 255, 0.1);
+  --brand-text-secondary: #94a3b8;
+  --brand-text-muted: #64748b;
+  --brand-bg-white-ops: rgba(255, 255, 255, 0.03);
+  --brand-bg-white-ops-hover: rgba(255, 255, 255, 0.07);
 }
 
 :root.light {
-  --brand-bg: #f8fafc;
-  --brand-card: #ffffff;
-  --brand-border: rgba(0, 0, 0, 0.08);
+  --brand-bg: #030509;
+  --brand-card: #070a10;
+  --brand-border: rgba(255, 255, 255, 0.08);
   --brand-text-white: #ffffff;
-  --brand-text-primary: #1e293b;
-  --brand-text-secondary: #64748b;
-  --brand-text-muted: #94a3b8;
-  --brand-bg-white-ops: rgba(0, 0, 0, 0.03);
-  --brand-bg-white-ops-hover: rgba(0, 0, 0, 0.06);
+  --brand-text-primary: #ffffff;
+  --brand-text-secondary: #94a3b8;
+  --brand-text-muted: #64748b;
+  --brand-bg-white-ops: rgba(255, 255, 255, 0.03);
+  --brand-bg-white-ops-hover: rgba(255, 255, 255, 0.07);
 }
 
 @theme {
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", "Plus Jakarta Sans", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
   --color-brand-bg: var(--brand-bg);
@@ -34,88 +35,260 @@
   --color-brand-border: var(--brand-border);
   --color-brand-text-primary: var(--brand-text-primary);
   --color-brand-text-secondary: var(--brand-text-secondary);
-  --color-brand-purple: #9333EA;
-  --color-brand-blue: #2563EB;
-  --color-brand-cyan: #22D3EE;
+  --color-brand-neon: #CCFF00;
+  --color-brand-cyan: #00FFFF;
   --color-brand-emerald: #10B981;
 }
 
 @layer base {
   body {
-    @apply bg-brand-bg text-[var(--brand-text-secondary)] antialiased selection:bg-brand-purple/30 font-sans transition-colors duration-300;
+    @apply bg-brand-bg text-[var(--brand-text-secondary)] antialiased selection:bg-[#CCFF00]/30 font-sans transition-colors duration-300;
   }
 }
 
 @layer components {
+  /* Sci-Fi HUD Panels - Completely flat, 1px subtle border, sharp corners */
   .saas-card {
-    @apply bg-brand-card border border-brand-border rounded-xl transition-all duration-200 shadow-sm;
+    @apply bg-[#070a10] border border-white/10 rounded-none transition-all duration-200;
   }
   
   .saas-button-primary {
-    @apply px-4 py-2 bg-brand-purple text-white font-semibold rounded-lg hover:bg-brand-purple/90 active:scale-95 transition-all shadow-sm;
+    @apply px-4 py-2 bg-transparent text-[#CCFF00] border border-[#CCFF00] font-['Space_Grotesk'] font-bold text-xs uppercase tracking-wider rounded-none hover:bg-[#CCFF00] hover:text-black active:scale-[0.98] transition-all;
   }
 
   .saas-button-secondary {
-    @apply px-4 py-2 bg-[var(--brand-bg-white-ops)] border border-brand-border text-[var(--brand-text-primary)] font-medium rounded-lg hover:bg-[var(--brand-bg-white-ops-hover)] active:scale-95 transition-all;
+    @apply px-4 py-2 bg-white/[0.03] border border-white/10 text-slate-300 font-['Space_Grotesk'] font-medium text-xs uppercase tracking-wider rounded-none hover:bg-white/[0.08] hover:text-[#CCFF00] hover:border-[#CCFF00]/40 active:scale-[0.98] transition-all;
   }
 
   .saas-input {
-    @apply bg-[var(--brand-bg-white-ops)] border border-brand-border rounded-lg px-4 py-2 text-[var(--brand-text-primary)] placeholder:text-gray-500 focus:border-brand-purple/50 focus:ring-4 focus:ring-brand-purple/10 outline-none transition-all;
+    @apply bg-white/[0.03] border border-white/15 rounded-none px-4 py-2.5 text-white placeholder:text-slate-600 focus:border-[#CCFF00] focus:ring-1 focus:ring-[#CCFF00] outline-none transition-all;
   }
 
   .nav-item {
-    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all;
+    @apply relative flex items-center justify-between px-3.5 py-2.5 rounded-none text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider transition-all cursor-pointer overflow-hidden;
+  }
+
+  .nav-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2.5px;
+    background-color: #CCFF00;
+    transform: scaleY(0);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: top;
+    box-shadow: 0 0 10px #CCFF00;
+  }
+
+  .nav-item:hover::before,
+  .nav-item-active::before {
+    transform: scaleY(1);
   }
 
   .nav-item-active {
-    @apply bg-[var(--brand-bg-white-ops)] text-[var(--brand-text-primary)] border border-brand-border shadow-sm;
+    @apply bg-[#CCFF00]/10 text-[#CCFF00];
   }
 
   .nav-item-inactive {
-    @apply text-[var(--brand-text-secondary)] hover:text-[var(--brand-text-primary)] hover:bg-[var(--brand-bg-white-ops)];
+    @apply text-slate-400 hover:text-[#CCFF00] hover:bg-white/[0.04];
   }
 }
 
-/* Custom scrollbar for a pro look */
+/* CRT Terminal Scanlines Effect */
+.crt-terminal-scanlines {
+  position: relative;
+}
+
+.crt-terminal-scanlines::before {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%, 
+    rgba(0, 0, 0, 0.45) 50%
+  );
+  background-size: 100% 4px;
+  z-index: 20;
+  pointer-events: none;
+  opacity: 0.65;
+}
+
+.crt-terminal-scanlines::after {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 120px;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 255, 255, 0),
+    rgba(0, 255, 255, 0.04) 50%,
+    rgba(204, 255, 0, 0.06) 80%,
+    rgba(0, 0, 0, 0)
+  );
+  z-index: 21;
+  pointer-events: none;
+  animation: crt-scan-sweep 8s linear infinite;
+}
+
+/* CRT Vignette to focus attention to the center */
+.crt-vignette-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at center, transparent 40%, rgba(0, 0, 0, 0.4) 75%, rgba(2, 4, 8, 0.85) 100%);
+  z-index: 22;
+}
+
+/* Hexagon Avatar */
+.hexagon-wrapper {
+  position: relative;
+  width: 88px;
+  height: 98px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 0 14px rgba(204, 255, 0, 0.4));
+  transition: filter 0.3s ease;
+}
+
+.hexagon-wrapper:hover {
+  filter: drop-shadow(0 0 20px #CCFF00) drop-shadow(0 0 8px #00FFFF);
+}
+
+.hexagon-outer {
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: #CCFF00;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5px;
+  transition: all 0.3s ease;
+}
+
+.hexagon-inner {
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: #000000;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Oscilloscope sweeping line */
+@keyframes oscilloscope-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
+.oscilloscope-beam {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 30px;
+  background: linear-gradient(90deg, transparent, rgba(204, 255, 0, 0.15), rgba(0, 255, 255, 0.3), transparent);
+  animation: oscilloscope-sweep 4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes crt-scan-sweep {
+  0% {
+    transform: translateY(-120px);
+  }
+  100% {
+    transform: translateY(1200px);
+  }
+}
+
+/* Avatar Text Glitch Effect */
+.glitch-text-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.group:hover .glitch-text-wrapper .glitch-text {
+  animation: glitch-skew 0.3s infinite;
+}
+
+.group:hover .glitch-text-wrapper .glitch-text::before,
+.group:hover .glitch-text-wrapper .glitch-text::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.group:hover .glitch-text-wrapper .glitch-text::before {
+  left: 2px;
+  text-shadow: -2px 0 #00FFFF;
+  clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
+  animation: glitch-anim-1 0.4s infinite linear alternate-reverse;
+}
+
+.group:hover .glitch-text-wrapper .glitch-text::after {
+  left: -2px;
+  text-shadow: 2px 0 #CCFF00;
+  clip-path: polygon(0 55%, 100% 55%, 100% 100%, 0 100%);
+  animation: glitch-anim-2 0.35s infinite linear alternate-reverse;
+}
+
+@keyframes glitch-skew {
+  0% { transform: skew(0deg); }
+  20% { transform: skew(-2deg); }
+  40% { transform: skew(2deg); }
+  60% { transform: skew(-1deg); }
+  80% { transform: skew(1deg); }
+  100% { transform: skew(0deg); }
+}
+
+@keyframes glitch-anim-1 {
+  0% { transform: translate(-2px, -1px); }
+  50% { transform: translate(1px, 1px); }
+  100% { transform: translate(-1px, 2px); }
+}
+
+@keyframes glitch-anim-2 {
+  0% { transform: translate(2px, 1px); }
+  50% { transform: translate(-1px, -1px); }
+  100% { transform: translate(1px, -2px); }
+}
+
+/* Subtle Sci-Fi HUD Coordinates Grid Background */
+.hud-grid-background {
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Custom sharp scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 0px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: #CCFF00;
 }
-
-/* Animated Breathing effect for Academic Standing card */
-@keyframes academic-breathing {
-  0% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.08);
-  }
-  50% {
-    transform: scale(1.008);
-    box-shadow: 0 4px 20px 4px rgba(34, 211, 238, 0.2);
-  }
-  100% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.08);
-  }
-}
-
-.academic-standing-card {
-  animation: academic-breathing 5s ease-in-out infinite;
-  transition: all 0.3s ease-in-out;
-}
-
-.academic-standing-card:hover {
-  animation-play-state: paused;
-  transform: scale(1.015);
-  box-shadow: 0 8px 24px 6px rgba(147, 51, 234, 0.3);
-  border-color: rgba(147, 51, 234, 0.3) !important;
-}
-

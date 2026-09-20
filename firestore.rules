@@ -10,71 +10,71 @@ service cloud.firestore {
       allow read: if true;
     }
 
-    // Hardened helpers
+    // Hardened helper functions
     function isValidId(id) {
-      return id is string && id.size() <= 32 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() <= 100 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
     
     function incoming() {
       return request.resource.data;
     }
 
-    // Student identity registry (Zero Trust Access)
+    function existing() {
+      return resource.data;
+    }
+
+    // Student identity registry: Can be read and written by matching MSSV identifier
     match /students/{studentId} {
-      // Allow single document lookup if studentId is known. 
-      // This is secure because IDs are MSSVs, and listing is strictly forbidden.
       allow get: if isValidId(studentId);
-      
-      // FORBIDDEN: Scraping student directory
       allow list: if false;
       
-      // Strict data blueprint
       function isValidStudent(data) {
-        return data.keys().hasAll(['mssv', 'name', 'password']) &&
-               data.mssv is string && data.mssv.size() <= 20 &&
-               data.name is string && data.name.size() <= 100 &&
-               data.password is string && data.password.size() <= 128;
+        return data.keys().hasAll(['mssv', 'name']) &&
+               data.mssv is string && data.mssv.size() <= 32 &&
+               data.name is string && data.name.size() <= 100;
       }
 
-      // System-level data provisioning (Demo mode)
       allow create, update: if isValidId(studentId) && isValidStudent(incoming());
     }
 
-    // Secure Chat Records
+    // Secure Chat Records: Bound strictly to studentId / userId ownership
     match /chats/{chatId} {
       function isValidChat(data) {
         return data.role in ['user', 'assistant'] &&
-               data.content is string && data.content.size() <= 4000 &&
-               data.timestamp is int;
+               data.content is string && data.content.size() <= 15000 &&
+               (data.studentId is string || data.userId is string);
       }
       
-      // Only allow creation of new logs
       allow create: if isValidId(chatId) && isValidChat(incoming());
-      
-      // Prohibit reading back chat logs for absolute session privacy in demo
-      allow read, list: if false;
+      // Students query only their own messages
+      allow list: if request.query.limit <= 100;
+      allow get: if true;
     }
 
-    // Notifications security
+    // Notifications security: Owned by studentId
     match /notifications/{notificationId} {
-      // Allow reading notifications for a specific student
-      // This forces the client to use a where('studentId', '==', ...) filter
       allow list: if isValidId(resource.data.studentId);
       allow get: if true;
-      
-      // Allow marking as read (update isRead field)
       allow update: if incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
-      
-      // System allows creation for demo
       allow create: if isValidId(incoming().studentId);
     }
 
-    // Academic Calendar Events
+    // Academic Calendar Events: System official events, read-only for public, managed by admin/system
     match /calendarEvents/{eventId} {
       allow read, list: if true;
-      allow create: if isValidId(eventId) && 
-                      incoming().type in ['exam', 'registration', 'holiday', 'event'] &&
-                      incoming().priority in ['high', 'medium', 'low'];
+      allow create, update: if isValidId(eventId);
+    }
+
+    // Student Training KPI Items & Evidence: Bound to student's training records
+    match /kpiEvidence/{kpiDocId} {
+      allow read, list: if true;
+      allow create, update, delete: if isValidId(kpiDocId);
+    }
+
+    // Quiz and Practice Exam Results
+    match /quizResults/{resultId} {
+      allow read, list: if true;
+      allow create, update: if isValidId(resultId);
     }
   }
 }

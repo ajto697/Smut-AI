@@ -15,6 +15,8 @@ export interface Student {
   class?: string;
   academicStatus?: string;
   birthDate?: string;
+  gpa?: number;
+  credits?: number;
 }
 
 export interface Notification {

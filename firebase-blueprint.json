@@ -55,6 +55,40 @@
         "priority": { "type": "string", "enum": ["high", "medium", "low"] }
       },
       "required": ["title", "date", "type"]
+    },
+    "kpiEvidence": {
+      "title": "KPI Evidence",
+      "description": "Student training criteria evidence and approval record.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "kpiId": { "type": "string" },
+        "code": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "points": { "type": "integer" },
+        "status": { "type": "string", "enum": ["not_submitted", "pending", "approved", "rejected"] },
+        "evidenceFile": { "type": "string" },
+        "evidenceText": { "type": "string" },
+        "evidenceImage": { "type": "string" },
+        "comment": { "type": "string" },
+        "updatedAt": { "type": "integer" }
+      },
+      "required": ["studentId", "code", "points", "status"]
+    },
+    "quizResult": {
+      "title": "Quiz Result",
+      "description": "Student quiz and practice exam performance record.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "subjectName": { "type": "string" },
+        "score": { "type": "integer" },
+        "totalQuestions": { "type": "integer" },
+        "percentage": { "type": "integer" },
+        "timestamp": { "type": "integer" }
+      },
+      "required": ["studentId", "subjectName", "score", "totalQuestions", "percentage", "timestamp"]
     }
   },
   "firestore": {
@@ -73,6 +107,14 @@
     "/calendarEvents/{eventId}": {
       "schema": "calendarEvent",
       "description": "Global academic calendar events."
+    },
+    "/kpiEvidence/{kpiDocId}": {
+      "schema": "kpiEvidence",
+      "description": "Collection of student training KPI items and submitted proofs."
+    },
+    "/quizResults/{resultId}": {
+      "schema": "quizResult",
+      "description": "Historical quiz and exam test results."
     }
   }
 }

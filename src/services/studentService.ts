@@ -19,13 +19,89 @@ export async function testConnection() {
   }
 }
 
+export async function getStudentProfile(mssv: string): Promise<Student | null> {
+  const path = 'students';
+  try {
+    const studentDoc = doc(db, path, mssv);
+    const snapshot = await getDoc(studentDoc);
+    if (!snapshot.exists()) {
+      if (mssv === '25010001' || mssv === '25010002') {
+        await seedDemoData();
+        const retrySnap = await getDoc(studentDoc);
+        if (retrySnap.exists()) {
+          const data = retrySnap.data();
+          return {
+            mssv: data.mssv,
+            name: data.name,
+            photoURL: data.photoURL,
+            email: data.email,
+            phone: data.phone,
+            major: data.major,
+            class: data.class,
+            academicStatus: data.academicStatus || 'Đang học',
+            birthDate: data.birthDate,
+            gpa: typeof data.gpa === 'number' ? data.gpa : (data.mssv === '25010001' ? 3.82 : 3.56),
+            credits: typeof data.credits === 'number' ? data.credits : (data.mssv === '25010001' ? 62 : 42)
+          };
+        }
+      }
+      return null;
+    }
+    const data = snapshot.data();
+    return {
+      mssv: data.mssv,
+      name: data.name,
+      photoURL: data.photoURL,
+      email: data.email,
+      phone: data.phone,
+      major: data.major,
+      class: data.class,
+      academicStatus: data.academicStatus || 'Đang học',
+      birthDate: data.birthDate,
+      gpa: typeof data.gpa === 'number' ? data.gpa : (data.mssv === '25010001' ? 3.82 : 3.56),
+      credits: typeof data.credits === 'number' ? data.credits : (data.mssv === '25010001' ? 62 : 42)
+    };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, path + '/' + mssv);
+    return null;
+  }
+}
+
 export async function verifyStudent(mssv: string, pass: string): Promise<Student | null> {
   const path = 'students';
   try {
     const studentDoc = doc(db, path, mssv);
     const snapshot = await getDoc(studentDoc);
     
-    if (!snapshot.exists()) return null;
+    if (!snapshot.exists()) {
+      if (mssv === '25010001' || mssv === '25010002') {
+        try {
+          await seedDemoData();
+          const retrySnap = await getDoc(studentDoc);
+          if (retrySnap.exists()) {
+            const data = retrySnap.data();
+            if (data.password === pass) {
+              return {
+                mssv: data.mssv,
+                name: data.name,
+                photoURL: data.photoURL,
+                email: data.email,
+                phone: data.phone,
+                major: data.major,
+                class: data.class,
+                academicStatus: data.academicStatus || 'Đang học',
+                birthDate: data.birthDate,
+                gpa: typeof data.gpa === 'number' ? data.gpa : (data.mssv === '25010001' ? 3.82 : 3.56),
+                credits: typeof data.credits === 'number' ? data.credits : (data.mssv === '25010001' ? 62 : 42)
+              };
+            }
+          }
+        } catch {
+          // Continue
+        }
+      }
+      return null;
+    }
     
     const data = snapshot.data();
     if (data.password !== pass) return null;
@@ -38,8 +114,10 @@ export async function verifyStudent(mssv: string, pass: string): Promise<Student
       phone: data.phone,
       major: data.major,
       class: data.class,
-      academicStatus: data.academicStatus,
-      birthDate: data.birthDate
+      academicStatus: data.academicStatus || 'Đang học',
+      birthDate: data.birthDate,
+      gpa: typeof data.gpa === 'number' ? data.gpa : (data.mssv === '25010001' ? 3.82 : 3.56),
+      credits: typeof data.credits === 'number' ? data.credits : (data.mssv === '25010001' ? 62 : 42)
     };
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, path + '/' + mssv);
@@ -72,7 +150,9 @@ export async function seedDemoData() {
       major: "Sư phạm Toán học",
       class: "2025-2029",
       academicStatus: "Đang học",
-      birthDate: "2007/02/09"
+      birthDate: "2007/02/09",
+      gpa: 3.82,
+      credits: 62
     },
     { 
       mssv: "25010002", 
@@ -83,7 +163,9 @@ export async function seedDemoData() {
       major: "Sư phạm Toán học",
       class: "2025-2029",
       academicStatus: "Đang học",
-      birthDate: "2007/12/28"
+      birthDate: "2007/12/28",
+      gpa: 3.56,
+      credits: 42
     }
   ];
 
@@ -92,7 +174,7 @@ export async function seedDemoData() {
       await setDoc(doc(db, 'students', s.mssv), {
         ...s,
         updatedAt: Timestamp.now()
-      });
+      }, { merge: true });
     } catch (e) {
       console.error("Seeding error:", e);
     }

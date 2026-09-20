@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { BookOpen, Award, CheckCircle, AlertTriangle, Clock, Play, FileText, Upload, Sparkles, Send, HelpCircle, Flame, ArrowRight, RefreshCw, X, Check, CheckSquare, Trash, Plus, Volume2, VolumeX } from 'lucide-react';
 import { QuizSubject, QuizQuestion, DocumentAnalysisResult } from '../types';
 import { gradeHomework, analyzeDocumentKeywords, generateQuizFromDocument, appraiseKpiEvidence } from '../services/geminiService';
+import { subscribeToStudentKpis, updateKpiInFirestore, saveQuizResultToFirestore } from '../services/kpiService';
 
 const MOCK_QUIZZES: QuizSubject[] = [
   {
@@ -327,7 +328,7 @@ Ba là, nhà trường cần tăng cường phòng tham vấn tâm lý học thu
   }
 };
 
-export const StudyOwlAzota: React.FC<{ studentName?: string }> = ({ studentName }) => {
+export const StudyOwlAzota: React.FC<{ studentName?: string; studentId?: string }> = ({ studentName, studentId }) => {
   const [activeTab, setActiveTab] = useState<'quiz' | 'document' | 'homework' | 'kpi'>('quiz');
   const [quizSubjects, setQuizSubjects] = useState<QuizSubject[]>(MOCK_QUIZZES);
 
@@ -373,7 +374,7 @@ export const StudyOwlAzota: React.FC<{ studentName?: string }> = ({ studentName 
   const [isDropped, setIsDropped] = useState(false);
   const hwFileInputRef = React.useRef<HTMLInputElement>(null);
 
-  // KPI States - Restored persistently from LocalStorage
+  // KPI States - Restored persistently from Firestore with LocalStorage fallback
   const [kpis, setKpis] = useState<SMUT_KPI_Item[]>(() => {
     try {
       const saved = localStorage.getItem('smut_scholar_owl_kpis');
@@ -388,9 +389,42 @@ export const StudyOwlAzota: React.FC<{ studentName?: string }> = ({ studentName 
   const [selectedKpi, setSelectedKpi] = useState<SMUT_KPI_Item | null>(null);
   const [evidenceFileNameInput, setEvidenceFileNameInput] = useState('');
   const [evidenceTextDesc, setEvidenceTextDesc] = useState('');
+  const [uploadedEvidencePreview, setUploadedEvidencePreview] = useState<string | null>(null);
+  const [isKpiDropOver, setIsKpiDropOver] = useState(false);
+  const kpiFileInputRef = React.useRef<HTMLInputElement>(null);
   const [isVerifyingKpi, setIsVerifyingKpi] = useState(false);
   const [kpiAnalysisFeedback, setKpiAnalysisFeedback] = useState<string | null>(null);
   const [selectedKpiCategory, setSelectedKpiCategory] = useState<string>("Tất cả");
+
+  const handleKpiFileSelect = (file: File) => {
+    setEvidenceFileNameInput(file.name);
+    if (!evidenceTextDesc.trim()) {
+      setEvidenceTextDesc(`Minh chứng "${file.name}" xác nhận hoàn thành tiêu chuẩn rèn luyện.`);
+    }
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setUploadedEvidencePreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setUploadedEvidencePreview(null);
+    }
+  };
+
+  // Sync KPIs in real time with Cloud Firestore
+  useEffect(() => {
+    const activeStudentId = studentId || '25010001';
+    const unsubscribe = subscribeToStudentKpis(activeStudentId, INITIAL_KPIS, (syncedKpis) => {
+      setKpis(syncedKpis);
+      try {
+        localStorage.setItem('smut_scholar_owl_kpis', JSON.stringify(syncedKpis));
+      } catch (e) {
+        // ignore
+      }
+    });
+    return () => unsubscribe();
+  }, [studentId]);
 
   // Sync KPIs count changes to localStorage
   useEffect(() => {
@@ -480,11 +514,18 @@ export const StudyOwlAzota: React.FC<{ studentName?: string }> = ({ studentName 
             status: finalStatus as any,
             evidenceFile: evidenceFileNameInput,
             evidenceText: evidenceTextDesc,
-            evidenceImage: getMockImageByFilename(evidenceFileNameInput),
+            evidenceImage: uploadedEvidencePreview || getMockImageByFilename(evidenceFileNameInput),
             comment: response
           };
           // Also update selectedKpi referencing item
           setSelectedKpi(updatedItem);
+          
+          // Persist to Cloud Firestore
+          const activeStudentId = studentId || '25010001';
+          updateKpiInFirestore(activeStudentId, updatedItem).catch((err) => 
+            console.warn('Sync to firestore error:', err)
+          );
+
           return updatedItem;
         }
         return item;
@@ -574,6 +615,15 @@ export const StudyOwlAzota: React.FC<{ studentName?: string }> = ({ studentName 
       setIsQuizActive(false);
       setQuizFinished(true);
       setOwlComment(OWL_COMMENTARY.finished);
+
+      // Persist completed quiz result to Cloud Firestore
+      const activeStudentId = studentId || '25010001';
+      saveQuizResultToFirestore(activeStudentId, {
+        subjectName: selectedSubject.name,
+        score,
+        totalQuestions: selectedSubject.questions.length,
+        percentage: Math.round((score / selectedSubject.questions.length) * 100)
+      }).catch((err) => console.warn('Save quiz result error:', err));
     }
   };
 
@@ -2105,6 +2155,53 @@ export const StudyOwlAzota: React.FC<{ studentName?: string }> = ({ studentName 
                                 >
                                   📄 Tạo minh chứng tự do: minh_chung_tu_do.png
                                 </button>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="block text-[8px] font-bold text-gray-500 uppercase tracking-widest">Tải lên minh chứng (Ảnh / PDF)</label>
+                              <input
+                                type="file"
+                                ref={kpiFileInputRef}
+                                accept="image/*,application/pdf"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handleKpiFileSelect(file);
+                                }}
+                              />
+                              <div
+                                onClick={() => kpiFileInputRef.current?.click()}
+                                onDragOver={(e) => { e.preventDefault(); setIsKpiDropOver(true); }}
+                                onDragLeave={() => setIsKpiDropOver(false)}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  setIsKpiDropOver(false);
+                                  const file = e.dataTransfer.files?.[0];
+                                  if (file) handleKpiFileSelect(file);
+                                }}
+                                className={`p-3 border-2 border-dashed rounded-lg text-center cursor-pointer transition-all ${
+                                  isKpiDropOver 
+                                    ? 'border-amber-400 bg-amber-400/10' 
+                                    : 'border-white/10 hover:border-amber-400/50 bg-white/[0.01]'
+                                }`}
+                              >
+                                {uploadedEvidencePreview ? (
+                                  <div className="flex items-center gap-3 justify-center">
+                                    <img src={uploadedEvidencePreview} alt="Preview" className="w-10 h-10 object-cover rounded border border-white/10" />
+                                    <div className="text-left text-[11px] font-mono text-amber-300 truncate max-w-[200px]">
+                                      {evidenceFileNameInput}
+                                      <p className="text-[9px] text-slate-400 font-sans">Bấm để chọn lại</p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-1">
+                                    <p className="text-xs font-mono font-bold text-slate-300">
+                                      📁 Kéo thả tệp minh chứng hoặc <span className="text-amber-400 underline">chọn từ máy</span>
+                                    </p>
+                                    <p className="text-[9px] text-slate-500">Hỗ trợ JPG, PNG, PDF tối đa 10MB</p>
+                                  </div>
+                                )}
                               </div>
                             </div>
 

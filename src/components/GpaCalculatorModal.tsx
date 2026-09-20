@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Plus, Trash2, Calculator, ArrowUpRight, Award, HelpCircle } from 'lucide-react';
 import { HypotheticalCourse } from '../types';
@@ -41,6 +41,13 @@ export const GpaCalculatorModal: React.FC<GpaCalculatorModalProps> = ({
 
   const [baselineCgpa, setBaselineCgpa] = useState(currentCgpa);
   const [baselineCredits, setBaselineCredits] = useState(currentCredits);
+
+  useEffect(() => {
+    if (isOpen) {
+      setBaselineCgpa(currentCgpa);
+      setBaselineCredits(currentCredits);
+    }
+  }, [isOpen, currentCgpa, currentCredits]);
 
   const handleAddCourse = (e: React.FormEvent) => {
     e.preventDefault();

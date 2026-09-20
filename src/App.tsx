@@ -6,7 +6,7 @@ import {
   Save, X, Phone, Mail, BookOpen, Calendar, Bell, Clock, CheckCheck, 
   AlertCircle, Stars, QrCode, Search, MessageSquare, Library, BookText, 
   Settings, HelpCircle, Plus, GraduationCap, Rocket, Globe, Book, TrendingUp,
-  ExternalLink, Download, Camera, Sun, Moon, Calculator
+  ExternalLink, Download, Camera, Sun, Moon, Calculator, Sparkles
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -15,17 +15,34 @@ import { getChatResponse, generateLoginGreeting, generateDashboardGreeting } fro
 import { SMUT_DATA } from './constants';
 import { auth } from './firebase';
 import { signOut } from 'firebase/auth';
-import { verifyStudent, updateStudentProfile, seedDemoData, testConnection } from './services/studentService';
+import { verifyStudent, updateStudentProfile, seedDemoData, testConnection, getStudentProfile } from './services/studentService';
 import { subscribeToNotifications, markAsRead, seedNotifications } from './services/notificationService';
 import { subscribeToCalendarEvents, seedCalendarEvents } from './services/calendarService';
+import { 
+  loginWithMssv, 
+  loginWithEmail, 
+  registerStudent, 
+  quickDemoLogin, 
+  logoutUser, 
+  onAuthChange 
+} from './services/authService';
+import { saveChatMessageToFirestore, subscribeToStudentChat } from './services/chatService';
 
 // Import New Features
 import { GpaCalculatorModal } from './components/GpaCalculatorModal';
+import { NotificationsModal } from './components/NotificationsModal';
+import { CyberToastContainer } from './components/CyberToast';
+import { showCyberToast } from './services/toastService';
 import { StudyOwlAzota } from './components/StudyOwlAzota';
 import { AppIntro } from './components/AppIntro';
+import { AppOutro } from './components/AppOutro';
 import { InteractiveTour } from './components/InteractiveTour';
 import { DailyCareTracker } from './components/DailyCareTracker';
+import { PrivacyNoticeModal } from './components/PrivacyNoticeModal';
 import { Compass } from 'lucide-react';
+import { SpatialOwl3D } from './components/SpatialOwl3D';
+import { SpatialFloatingInput } from './components/SpatialFloatingInput';
+import { SpatialSharpButton } from './components/SpatialSharpButton';
 
 // --- Components ---
 
@@ -69,17 +86,16 @@ const Logo = ({ size = 32, className = "" }: { size?: number, className?: string
   >
     <defs>
       <linearGradient id="owlGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="var(--color-brand-purple)" />
-        <stop offset="50%" stopColor="var(--color-brand-blue)" />
-        <stop offset="100%" stopColor="var(--color-brand-cyan)" />
+        <stop offset="0%" stopColor="#CCFF00" />
+        <stop offset="100%" stopColor="#00FFFF" />
       </linearGradient>
       <linearGradient id="eyeGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-        <stop offset="0%" stopColor="var(--color-brand-cyan)" />
-        <stop offset="100%" stopColor="var(--color-brand-emerald)" />
+        <stop offset="0%" stopColor="#00FFFF" />
+        <stop offset="100%" stopColor="#CCFF00" />
       </linearGradient>
       <radialGradient id="owlGlow" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stopColor="var(--color-brand-emerald)" stopOpacity="0.8" />
-        <stop offset="100%" stopColor="var(--color-brand-emerald)" stopOpacity="0" />
+        <stop offset="0%" stopColor="#CCFF00" stopOpacity="0.4" />
+        <stop offset="100%" stopColor="#CCFF00" stopOpacity="0" />
       </radialGradient>
     </defs>
     
@@ -276,17 +292,36 @@ const LoginFlyingOwl = () => {
   );
 };
 
-const NavButton = ({ icon: Icon, label, active, onClick, badge, className = "" }: any) => (
+const DiamondDot = (props: any) => {
+  const { cx, cy } = props;
+  if (!cx || !cy) return null;
+  return (
+    <polygon 
+      points={`${cx},${cy - 5} ${cx + 5},${cy} ${cx},${cy + 5} ${cx - 5},${cy}`}
+      fill="#CCFF00" 
+      stroke="#000000" 
+      strokeWidth={1}
+      className="filter drop-shadow-[0_0_6px_#CCFF00]"
+    />
+  );
+};
+
+const NavButton = ({ num, icon: Icon, label, active, onClick, badge, className = "" }: any) => (
   <button 
     onClick={onClick}
-    className={`nav-item w-full ${active ? 'nav-item-active' : 'nav-item-inactive'} ${className}`}
+    className={`group nav-item w-full ${active ? 'nav-item-active' : 'nav-item-inactive'} ${className}`}
   >
-    <div className="flex items-center gap-3">
-      <Icon size={18} className={active ? 'text-brand-purple' : ''} />
-      <span className="font-semibold">{label}</span>
+    <div className="flex items-center gap-2.5">
+      {num && (
+        <span className={`text-[10px] font-mono font-bold transition-colors duration-150 ${active ? 'text-[#00FFFF]' : 'text-slate-600 group-hover:text-[#00FFFF]'}`}>
+          {num}
+        </span>
+      )}
+      <Icon size={15} className={`transition-colors duration-150 ${active ? 'text-[#CCFF00]' : 'text-slate-400 group-hover:text-[#CCFF00]'}`} />
+      <span className={`font-mono text-xs font-bold tracking-wider transition-colors duration-150 ${active ? 'text-[#CCFF00]' : 'text-slate-300 group-hover:text-white'}`}>{label}</span>
     </div>
     {badge && (
-      <span className="bg-brand-purple text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold">
+      <span className="bg-[#CCFF00] text-black text-[9px] px-1.5 py-0.5 rounded-none font-mono font-bold shadow-[0_0_8px_rgba(204,255,0,0.4)]">
         {badge}
       </span>
     )}
@@ -347,9 +382,9 @@ const ProfileItem = ({ icon: Icon, label, value, isEditing, onChange, name, link
 const QuickPrompt = ({ text, onClick }: any) => (
   <button 
     onClick={onClick}
-    className="px-3 py-2 bg-white/[0.03] border border-brand-border rounded-lg text-xs font-semibold text-gray-400 hover:text-white hover:bg-white/10 transition-all flex items-center gap-2"
+    className="px-3 py-2 bg-white/[0.03] border border-white/10 rounded-none text-xs font-mono font-medium text-slate-300 hover:text-[#CCFF00] hover:border-[#CCFF00]/50 hover:bg-white/[0.07] transition-all flex items-center gap-2"
   >
-    <Stars size={12} className="text-brand-purple" />
+    <Stars size={12} className="text-[#CCFF00]" />
     {text}
   </button>
 );
@@ -387,64 +422,83 @@ const MessageBubble: React.FC<{ message: Message; studentName: string }> = ({ me
   const mapTagMatch = message.content.match(/\[MAP:(cs[12])\]/);
   const campusId = mapTagMatch ? mapTagMatch[1] : null;
   const cleanContent = message.content.replace(/\[MAP:cs[12]\]/g, '');
+  const timeFormatted = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 15, scale: 0.95 }}
+      initial={{ opacity: 0, y: 12, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ type: "spring", stiffness: 260, damping: 20 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
       className={`flex flex-col ${isBot ? 'items-start' : 'items-end'} mb-6 group`}
     >
-      <div className={`flex items-center gap-2 mb-2 ${isBot ? '' : 'flex-row-reverse'}`}>
+      <div className={`flex items-center gap-2 mb-1.5 ${isBot ? '' : 'flex-row-reverse'}`}>
         <motion.div 
-          whileHover={{ scale: 1.1 }}
-          className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${
-            isBot ? 'bg-brand-purple/20 text-brand-purple shadow-[0_0_15px_rgba(147,51,234,0.15)] border border-brand-purple/10' : 'bg-brand-card border border-brand-border text-brand-text-primary'
+          whileHover={{ scale: 1.05 }}
+          className={`w-6 h-6 rounded-none flex items-center justify-center transition-all ${
+            isBot 
+              ? 'bg-black text-[#00FFFF] border border-[#00FFFF]/60 shadow-[0_0_8px_rgba(0,255,255,0.3)]' 
+              : 'bg-black border border-[#CCFF00]/60 text-[#CCFF00] shadow-[0_0_8px_rgba(204,255,0,0.2)]'
           }`}
         >
-           {isBot ? <Logo size={16} /> : <span className="text-[10px] font-bold">{studentName.charAt(0)}</span>}
+           {isBot ? <Logo size={14} /> : <span className="text-[10px] font-mono font-bold">{studentName.charAt(0) || 'B'}</span>}
         </motion.div>
-        <span className="text-[10px] font-bold text-brand-text-secondary uppercase tracking-[0.2em] opacity-50 group-hover:opacity-100 transition-opacity">
-          {isBot ? 'Neural Assistant' : 'Authorized User'}
+        <span className="text-[9px] font-mono font-bold tracking-[0.2em] uppercase text-slate-400">
+          {isBot ? 'NEURAL ASSISTANT' : 'USER TERMINAL'}
         </span>
       </div>
-      <div className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed relative transition-all duration-300 ${
+
+      {/* Data Packet */}
+      <div className={`max-w-[88%] p-4 text-xs font-['Plus_Jakarta_Sans'] leading-relaxed relative rounded-none transition-all duration-200 ${
         isBot 
-          ? 'bg-brand-card/40 backdrop-blur-md border border-brand-border text-brand-text-secondary hover:border-brand-purple/30 shadow-sm' 
-          : 'bg-gradient-to-br from-brand-purple to-brand-purple/80 text-white shadow-[0_8px_20px_rgba(147,51,234,0.15)] border border-white/10'
+          ? 'bg-black border-l-2 border-[#00FFFF] border-t-0 border-r-0 border-b-0 text-slate-200 shadow-[0_0_25px_rgba(0,0,0,0.9)]' 
+          : 'bg-transparent border-r-2 border-[#CCFF00] border-t-0 border-l-0 border-b-0 text-white text-right'
       }`}>
+        {/* Top-left system tag for AI Data Packet */}
         {isBot && (
-          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-brand-purple/3 to-transparent rounded-2xl pointer-events-none" />
+          <div className="text-[9px] font-mono font-bold text-[#00FFFF] mb-2 tracking-widest flex items-center gap-1.5 opacity-90 select-none">
+            <span className="w-1.5 h-1.5 bg-[#00FFFF] rounded-none shadow-[0_0_6px_#00FFFF]" />
+            <span>[SYSTEM_MSG: {timeFormatted}]</span>
+          </div>
         )}
+
+        {!isBot && (
+          <div className="text-[9px] font-mono font-bold text-[#CCFF00] mb-2 tracking-widest flex items-center justify-end gap-1.5 opacity-90 select-none">
+            <span>[DATA_TX: {timeFormatted}]</span>
+            <span className="w-1.5 h-1.5 bg-[#CCFF00] rounded-none shadow-[0_0_6px_#CCFF00]" />
+          </div>
+        )}
+
         <div 
-          className="relative z-10"
+          className={`relative z-10 ${isBot ? 'text-left' : 'text-right'}`}
           dangerouslySetInnerHTML={{ __html: cleanContent.replace(/\n/g, '<br/>') }} 
         />
 
         {isBot && campusId && (
           <motion.div 
-            initial={{ opacity: 0, scale: 0.9 }}
+            initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="mt-4 w-full h-32 rounded-xl border border-brand-border overflow-hidden relative group cursor-pointer shadow-xl"
+            className="mt-4 w-full h-32 rounded-none border border-[#00FFFF]/40 overflow-hidden relative group cursor-pointer shadow-xl"
             onClick={() => window.open(campusId === 'cs1' ? SMUT_DATA.campuses[0].maps : SMUT_DATA.campuses[1].maps, '_blank')}
           >
-            <div className={`absolute inset-0 bg-cover bg-center`} style={{ backgroundImage: `url('https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/pin-s+9333ea(${campusId === 'cs1' ? '106.698,10.773' : '106.719,10.729'})/${campusId === 'cs1' ? '106.698,10.773' : '106.719,10.729'},15/400x200@2x?access_token=pk.eyJ1IjoiZGV2LW1hZ2ljIiwiYSI6ImNscjZqbjRrajBmamIyanBlM3F3NmJ3ZGMifQ')` }} />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-            <div className="absolute bottom-3 left-3">
-              <p className="text-[10px] font-bold text-white uppercase tracking-widest">{campusId === 'cs1' ? SMUT_DATA.campuses[0].name : SMUT_DATA.campuses[1].name}</p>
-              <p className="text-[9px] text-gray-300 mt-0.5">{campusId === 'cs1' ? SMUT_DATA.campuses[0].address : SMUT_DATA.campuses[1].address}</p>
+            <div className={`absolute inset-0 bg-cover bg-center`} style={{ backgroundImage: `url('https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/pin-s+00ffff(${campusId === 'cs1' ? '106.698,10.773' : '106.719,10.729'})/${campusId === 'cs1' ? '106.698,10.773' : '106.719,10.729'},15/400x200@2x?access_token=pk.eyJ1IjoiZGV2LW1hZ2ljIiwiYSI6ImNscjZqbjRrajBmamIyanBlM3F3NmJ3ZGMifQ')` }} />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
+            <div className="absolute bottom-3 left-3 text-left">
+              <p className="text-[10px] font-mono font-bold text-[#CCFF00] uppercase tracking-widest">{campusId === 'cs1' ? SMUT_DATA.campuses[0].name : SMUT_DATA.campuses[1].name}</p>
+              <p className="text-[9px] font-mono text-slate-300 mt-0.5">{campusId === 'cs1' ? SMUT_DATA.campuses[0].address : SMUT_DATA.campuses[1].address}</p>
             </div>
-            <div className="absolute top-3 right-3 p-1.5 bg-brand-purple/80 backdrop-blur-md rounded-lg text-white shadow-lg">
+            <div className="absolute top-2 right-2 p-1 bg-black/80 border border-[#00FFFF]/50 rounded-none text-[#00FFFF]">
                <MapPin size={12} />
             </div>
           </motion.div>
         )}
 
-        <div className={`mt-3 text-[9px] ${isBot ? 'text-brand-text-muted' : 'text-white/60'} font-mono flex items-center gap-1.5`}>
-          <Clock size={8} />
-          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          {!isBot && <div className="w-1 h-1 rounded-full bg-white/40" />}
-          {!isBot && <span className="uppercase">Encrypted</span>}
+        <div className={`mt-3 text-[9px] font-mono flex items-center gap-1.5 ${isBot ? 'text-slate-500' : 'text-slate-500 justify-end'}`}>
+          <Clock size={9} className={isBot ? 'text-[#00FFFF]' : 'text-[#CCFF00]'} />
+          <span>{timeFormatted}</span>
+          <span className="text-slate-600">//</span>
+          <span className={`uppercase tracking-widest ${isBot ? 'text-[#00FFFF]/70' : 'text-[#CCFF00]/70'}`}>
+            {isBot ? 'VERIFIED_FEED' : 'PACKET_ENCRYPTED'}
+          </span>
         </div>
       </div>
     </motion.div>
@@ -459,6 +513,9 @@ export default function App() {
   const [isGpaModalOpen, setIsGpaModalOpen] = useState(false);
   const [isTourActive, setIsTourActive] = useState(false);
   const [isIntroOpen, setIsIntroOpen] = useState(false);
+  const [isOutroOpen, setIsOutroOpen] = useState(false);
+  const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   
   const [loginStep, setLoginStep] = useState<'login' | 'mfa'>('login');
   const [otp, setOtp] = useState('');
@@ -466,6 +523,45 @@ export default function App() {
   const [student, setStudent] = useState<Student | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+
+  // Typewriter effect for command placeholder
+  const TYPEWRITER_PHRASES = [
+    "NHẬP LỆNH HOẶC CÂU HỎI HỌC VỤ...",
+    "TRA CỨU LỊCH THI HỌC KỲ VÀ PHÒNG THI...",
+    "DỰ BÁO TIẾN ĐỘ TÍN CHỈ VÀ GPA MỤC TIÊU...",
+    "ĐỊNH VỊ PHÒNG HỌC CƠ SỞ 1 VÀ CƠ SỞ 2..."
+  ];
+  const [placeholderText, setPlaceholderText] = useState("");
+  const [phraseIndex, setPhraseIndex] = useState(0);
+  const [charIndex, setCharIndex] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isInputFocused, setIsInputFocused] = useState(false);
+
+  useEffect(() => {
+    const currentPhrase = TYPEWRITER_PHRASES[phraseIndex % TYPEWRITER_PHRASES.length];
+    let timer: any;
+
+    if (!isDeleting && charIndex <= currentPhrase.length) {
+      timer = setTimeout(() => {
+        setPlaceholderText(currentPhrase.slice(0, charIndex));
+        setCharIndex(c => c + 1);
+      }, 50);
+    } else if (!isDeleting && charIndex > currentPhrase.length) {
+      timer = setTimeout(() => {
+        setIsDeleting(true);
+      }, 2000);
+    } else if (isDeleting && charIndex > 0) {
+      timer = setTimeout(() => {
+        setPlaceholderText(currentPhrase.slice(0, charIndex - 1));
+        setCharIndex(c => c - 1);
+      }, 25);
+    } else if (isDeleting && charIndex === 0) {
+      setIsDeleting(false);
+      setPhraseIndex(p => p + 1);
+    }
+
+    return () => clearTimeout(timer);
+  }, [charIndex, isDeleting, phraseIndex]);
 
   const [dashboardGreeting, setDashboardGreeting] = useState('');
   const [isGeneratingDashboardGreeting, setIsGeneratingDashboardGreeting] = useState(false);
@@ -502,6 +598,23 @@ export default function App() {
   const [isUploading, setIsUploading] = useState(false);
   const [isOnline, setIsOnline] = useState(window.navigator.onLine);
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+
+  // Firebase Auth & Cloud Firestore state
+  const [firebaseUser, setFirebaseUser] = useState<any>(null);
+  const [authTab, setAuthTab] = useState<'mssv' | 'email' | 'register'>('mssv');
+  const [emailInput, setEmailInput] = useState('');
+  const [regName, setRegName] = useState('');
+  const [regMssv, setRegMssv] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPass, setRegPass] = useState('');
+  const [regMajor, setRegMajor] = useState('Sư phạm Toán học');
+
+  useEffect(() => {
+    const unsub = onAuthChange((user) => {
+      setFirebaseUser(user);
+    });
+    return () => unsub();
+  }, []);
 
   
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -543,8 +656,26 @@ export default function App() {
   useEffect(() => {
     testConnection().catch(() => {});
     seedCalendarEvents().catch(() => {});
+    seedDemoData().catch(() => {});
     
     const unsubscribeCalendar = subscribeToCalendarEvents(setCalendarEvents);
+
+    // Auto-restore session if saved in sessionStorage
+    const savedMssv = sessionStorage.getItem('scholar_owl_session_mssv');
+    if (savedMssv) {
+      getStudentProfile(savedMssv).then((s) => {
+        if (s) {
+          setStudent(s);
+          setIsLoggedIn(true);
+          showCyberToast({
+            type: 'info',
+            title: 'PHIÊN HỌC VỤ // KHÔI PHỤC',
+            message: `Chào mừng ${s.name} trở lại Neural Terminal.`
+          });
+        }
+      }).catch(() => {});
+    }
+
     return () => unsubscribeCalendar();
   }, []);
 
@@ -553,7 +684,15 @@ export default function App() {
       const unsubscribeNotifs = subscribeToNotifications(student.mssv, (notifs) => {
         setNotifications(notifs);
       });
-      return () => unsubscribeNotifs();
+      const unsubscribeChat = subscribeToStudentChat(student.mssv, (dbMessages) => {
+        if (dbMessages && dbMessages.length > 0) {
+          setMessages(dbMessages);
+        }
+      });
+      return () => {
+        unsubscribeNotifs();
+        unsubscribeChat();
+      };
     }
   }, [student]);
 
@@ -563,9 +702,14 @@ export default function App() {
 
   useEffect(() => {
     if (isLoggedIn) {
-      const isDone = localStorage.getItem('smut_onboarding_done');
-      if (!isDone) {
-        setIsIntroOpen(true);
+      const isConsentGiven = localStorage.getItem('smut_privacy_consent');
+      if (!isConsentGiven) {
+        setIsPrivacyOpen(true);
+      } else {
+        const hasSeen = localStorage.getItem('hasSeenIntro') === 'true' || localStorage.getItem('smut_onboarding_done') === 'true';
+        if (!hasSeen) {
+          setIsIntroOpen(true);
+        }
       }
     }
   }, [isLoggedIn]);
@@ -681,25 +825,148 @@ export default function App() {
     document.body.removeChild(link);
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleMssvLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateMSSV(mssvInput)) {
-      setLoginError('MSSV must be 8 digits');
+      setLoginError('MSSV phải gồm đúng 8 chữ số (ví dụ: 25010001)');
       return;
     }
     setLoginError('');
     setIsAuthenticating(true);
     try {
-      const verifiedStudent = await verifyStudent(mssvInput, passInput);
-      if (verifiedStudent) {
+      const res = await loginWithMssv(mssvInput, passInput);
+      if (res.student) {
         setGeneratedOtp(Math.floor(100000 + Math.random() * 900000).toString());
-        setEditedStudent(verifiedStudent);
+        setEditedStudent(res.student);
         setLoginStep('mfa');
       } else {
-        setLoginError('Invalid credentials');
+        setLoginError(res.error || 'Mã sinh viên hoặc mật khẩu không chính xác');
       }
     } catch (error) {
-      setLoginError('System error');
+      setLoginError('Lỗi kết nối cơ sở dữ liệu');
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailInput.includes('@')) {
+      setLoginError('Vui lòng nhập định dạng email hợp lệ');
+      return;
+    }
+    setLoginError('');
+    setIsAuthenticating(true);
+    try {
+      const res = await loginWithEmail(emailInput, passInput);
+      if (res.student) {
+        setStudent(res.student);
+        setIsLoggedIn(true);
+        sessionStorage.setItem('scholar_owl_session_mssv', res.student.mssv);
+        seedNotifications(res.student.mssv).catch(() => {});
+        showCyberToast({
+          type: 'success',
+          title: 'FIREBASE AUTH // THÀNH CÔNG',
+          message: `Chào mừng ${res.student.name} gia nhập Neural Terminal.`
+        });
+        setMessages([{
+          id: '1',
+          role: 'assistant',
+          content: `Xin chào ${res.student.name}! Mình là Trợ lý Cú Học Tập trường Đại học. Rất vui được đồng hành cùng bạn! 🦉`,
+          timestamp: Date.now()
+        }]);
+      } else {
+        setLoginError(res.error || 'Đăng nhập thất bại');
+      }
+    } catch (err) {
+      setLoginError('Lỗi xác thực Firebase Auth');
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateMSSV(regMssv)) {
+      setLoginError('MSSV đăng ký phải đúng 8 chữ số');
+      return;
+    }
+    if (!regName.trim()) {
+      setLoginError('Vui lòng nhập Họ và tên');
+      return;
+    }
+    if (!regEmail.includes('@')) {
+      setLoginError('Email không hợp lệ');
+      return;
+    }
+    if (regPass.length < 6) {
+      setLoginError('Mật khẩu cần tối thiểu 6 ký tự');
+      return;
+    }
+    setLoginError('');
+    setIsAuthenticating(true);
+    try {
+      const res = await registerStudent({
+        mssv: regMssv,
+        name: regName.trim(),
+        email: regEmail.trim(),
+        major: regMajor,
+        class: 'K25'
+      }, regPass);
+
+      if (res.student) {
+        setStudent(res.student);
+        setIsLoggedIn(true);
+        sessionStorage.setItem('scholar_owl_session_mssv', res.student.mssv);
+        seedNotifications(res.student.mssv).catch(() => {});
+        showCyberToast({
+          type: 'success',
+          title: 'TÀI KHOẢN // KHỞI TẠO XONG',
+          message: `Đã cấp quyền Firebase Auth cho sinh viên ${res.student.name}.`
+        });
+        setMessages([{
+          id: '1',
+          role: 'assistant',
+          content: `Chào mừng bạn mới ${res.student.name} đã gia nhập cổng Scholar Owl! Tài khoản đã được cấp quyền Firebase Auth & Firestore. 🦉`,
+          timestamp: Date.now()
+        }]);
+      } else {
+        setLoginError(res.error || 'Đăng ký tài khoản không thành công');
+      }
+    } catch (err) {
+      setLoginError('Lỗi đăng ký tài khoản');
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  const handleQuickDemo = async (demoMssv: string) => {
+    setIsAuthenticating(true);
+    setLoginError('');
+    try {
+      await seedDemoData();
+      const res = await quickDemoLogin(demoMssv);
+      if (res.student) {
+        setStudent(res.student);
+        setIsLoggedIn(true);
+        sessionStorage.setItem('scholar_owl_session_mssv', res.student.mssv);
+        seedNotifications(res.student.mssv).catch(() => {});
+        showCyberToast({
+          type: 'success',
+          title: 'XÁC THỰC DEMO // THÀNH CÔNG',
+          message: `Đã đăng nhập tài khoản mẫu [MSSV: ${res.student.mssv} - ${res.student.name}].`
+        });
+        setMessages([{
+          id: '1',
+          role: 'assistant',
+          content: `Xin chào ${res.student.name}! Mình là Trợ lý Cú Học Tập (Scholar Owl). Rất vui được đồng hành cùng bạn! 🦉`,
+          timestamp: Date.now()
+        }]);
+      } else {
+        setLoginError('Không thể nạp dữ liệu demo');
+      }
+    } catch (e) {
+      setLoginError('Lỗi khởi tạo tài khoản');
     } finally {
       setIsAuthenticating(false);
     }
@@ -710,14 +977,21 @@ export default function App() {
     if (otp === generatedOtp && editedStudent) {
       setStudent(editedStudent);
       setIsLoggedIn(true);
+      sessionStorage.setItem('scholar_owl_session_mssv', editedStudent.mssv);
+      seedNotifications(editedStudent.mssv).catch(() => {});
+      showCyberToast({
+        type: 'success',
+        title: 'MFA VERIFIED // HOÀN TẤT',
+        message: `Xác thực 2 lớp thành công cho ${editedStudent.name}.`
+      });
       setMessages([{
         id: '1',
         role: 'assistant',
-        content: `Hi ${editedStudent.name}! I'm your University AI Assistant. How can I help you today?`,
+        content: `Xin chào ${editedStudent.name}! Mình là Trợ lý Cú AI của Trường Đại học. Rất vui được hỗ trợ bạn hôm nay! 🦉`,
         timestamp: Date.now()
       }]);
     } else {
-      setLoginError('Invalid OTP');
+      setLoginError('Mã xác thực OTP không chính xác');
     }
   };
 
@@ -730,157 +1004,438 @@ export default function App() {
     setInput('');
     setIsLoading(true);
 
+    if (student) {
+      saveChatMessageToFirestore(student.mssv, 'user', messageText).catch(() => {});
+    }
+
     try {
       const response = await getChatResponse([...messages, userMsg], student?.name);
-      setMessages(prev => [...prev, { id: (Date.now()+1).toString(), role: 'assistant', content: response, timestamp: Date.now() }]);
+      const botMsg: Message = { id: (Date.now()+1).toString(), role: 'assistant', content: response, timestamp: Date.now() };
+      setMessages(prev => [...prev, botMsg]);
+      if (student) {
+        saveChatMessageToFirestore(student.mssv, 'assistant', response).catch(() => {});
+      }
     } catch (error) {
-      setMessages(prev => [...prev, { id: (Date.now()+1).toString(), role: 'assistant', content: "Error processing request.", timestamp: Date.now() }]);
+      setMessages(prev => [...prev, { id: (Date.now()+1).toString(), role: 'assistant', content: "Có lỗi khi xử lý yêu cầu. Bạn hãy thử lại sau giây lát nhé.", timestamp: Date.now() }]);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleLogout = async () => {
+    sessionStorage.removeItem('scholar_owl_session_mssv');
+    showCyberToast({
+      type: 'info',
+      title: 'HỆ THỐNG // ĐĂNG XUẤT',
+      message: 'Đã đóng phiên làm việc an toàn.'
+    });
+    await logoutUser();
+    setIsLoggedIn(false);
+    setStudent(null);
+    setLoginStep('login');
+    setOtp('');
+  };
+
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-brand-bg flex items-center justify-center p-6 relative overflow-hidden">
-        {/* Cinematic Space Background */}
-        <div 
-          className="absolute inset-0 z-0 opacity-40 mix-blend-screen"
-          style={{ 
-            backgroundImage: 'url("https://images.unsplash.com/photo-1464802686167-b939a6910659?q=80&w=2666&auto=format&fit=crop")',
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            filter: 'blur(2px) grayscale(0.2)'
-          }}
-        />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,transparent_0%,rgba(2,4,8,0.8)_100%)] z-0" />
-        
-        {/* Interactive Floating Owl Mascot saying Hi! */}
-        <LoginFlyingOwl />
-        
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }} 
-          animate={{ opacity: 1, y: 0 }} 
-          className="w-full max-w-md saas-card bg-brand-bg/90 backdrop-blur-xl p-8 shadow-2xl relative z-10 border-white/10"
-        >
-          <div className="flex flex-col items-center mb-8">
-            <div className="w-20 h-20 bg-brand-purple/5 rounded-3xl flex items-center justify-center mb-6 border border-brand-purple/10 relative">
-              <div className="absolute inset-0 bg-brand-cyan/5 blur-2xl rounded-full" />
-              <Logo size={48} />
+      <div 
+        id="spatial-login-screen"
+        className="min-h-screen bg-gradient-to-b from-[#06080d] via-[#090d15] to-[#030407] flex items-center justify-center p-4 sm:p-8 lg:p-12 relative overflow-hidden select-none"
+        style={{ perspective: 1400 }}
+      >
+        {/* Spatial Deep Depth Ambient Glow Orbs */}
+        <div className="absolute -top-40 -left-40 w-[600px] h-[600px] bg-cyan-950/20 blur-[180px] pointer-events-none rounded-none" />
+        <div className="absolute -bottom-40 right-0 w-[600px] h-[600px] bg-[#CCFF00]/5 blur-[220px] pointer-events-none rounded-none" />
+
+        {/* 60 / 40 Asymmetric Spatial Computing Grid */}
+        <div className="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14 items-center relative z-10">
+          
+          {/* LEFT 60% (7 cols on lg screens): Giant Mascot Owl & Negative Space */}
+          <div className="lg:col-span-7 flex flex-col items-start justify-center text-left py-4 lg:py-12">
+            {/* Academic Division Header */}
+            <div className="mb-6 flex items-center gap-3">
+              <span className="w-2.5 h-2.5 bg-[#CCFF00] rounded-none shadow-[0_0_12px_#CCFF00] animate-pulse" />
+              <span className="font-['JetBrains_Mono'] font-mono text-xs uppercase tracking-[0.28em] text-[#CCFF00] font-bold">
+                SPATIAL ACADEMIC ECOSYSTEM
+              </span>
             </div>
-            <h1 className="text-2xl font-bold text-brand-text-primary tracking-tight">Scholar Owl Portal</h1>
-            <p className="text-xs text-brand-text-secondary font-bold uppercase tracking-[0.2em] mt-1">Universal Education Dashboard</p>
+
+            {/* Giant Spatial Owl 3D & Glowing Speech Bubble */}
+            <SpatialOwl3D />
+
+            {/* Subtle Spatial System Info Tag */}
+            <div className="mt-8 flex items-center gap-4 text-xs font-['JetBrains_Mono'] font-mono text-slate-500">
+              <div className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-none animate-pulse" />
+                <span>AES-256 Auth</span>
+              </div>
+              <span>·</span>
+              <div className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-cyan-400 rounded-none" />
+                <span>Cloud Firestore Active</span>
+              </div>
+            </div>
           </div>
 
-          <form onSubmit={loginStep === 'login' ? handleLogin : handleVerifyOtp} className="space-y-4">
-            {loginStep === 'login' ? (
-              <>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-gray-500 uppercase">Student Email / ID</label>
-                  <input 
-                    type="text" 
-                    value={mssvInput} 
+          {/* RIGHT 40% (5 cols on lg screens): Left-Aligned Spatial Form Glass Slab */}
+          <div className="lg:col-span-5 w-full flex justify-end">
+            <motion.div 
+              initial={{ opacity: 0, x: 28, scale: 0.98 }} 
+              animate={{ opacity: 1, x: 0, scale: 1 }} 
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              className="w-full bg-[#080b12]/92 backdrop-blur-3xl p-6 sm:p-9 rounded-none border border-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.95),0_15px_35px_rgba(0,0,0,0.85),0_1px_1px_rgba(255,255,255,0.12)_inset] relative text-left"
+            >
+              {/* Header Identity - Left Aligned */}
+              <div className="mb-7 text-left">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-2 h-2 bg-[#CCFF00] rounded-none shadow-[0_0_10px_#CCFF00]" />
+                  <span className="font-['JetBrains_Mono'] font-mono text-[10px] uppercase tracking-[0.25em] text-slate-400 font-bold">
+                    Khóa K25 · Cán Bộ &amp; Sinh Viên
+                  </span>
+                </div>
+                <h1 className="font-['Space_Grotesk'] text-4xl sm:text-5xl font-extrabold text-white tracking-[-0.02em] leading-tight">
+                  Scholar Owl System
+                </h1>
+                <p className="text-xs text-slate-400 mt-1.5 font-['Plus_Jakarta_Sans'] font-medium">
+                  Truy cập bảng điều khiển học vụ và trợ lý AI thông minh
+                </p>
+              </div>
+
+              {/* Tabs with Animated Running Underline (Neon Lime #CCFF00) */}
+              {loginStep === 'login' && (
+                <div className="relative border-b border-white/15 mb-6">
+                  {/* Tab Navigation Buttons */}
+                  <div className="grid grid-cols-3">
+                    <button
+                      type="button"
+                      onClick={() => { setAuthTab('mssv'); setLoginError(''); }}
+                      className={`pb-3 pt-1 text-[11px] font-['Space_Grotesk'] font-bold uppercase tracking-wider transition-colors duration-200 text-center ${
+                        authTab === 'mssv' ? 'text-[#CCFF00]' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      MSSV
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setAuthTab('email'); setLoginError(''); }}
+                      className={`pb-3 pt-1 text-[11px] font-['Space_Grotesk'] font-bold uppercase tracking-wider transition-colors duration-200 text-center ${
+                        authTab === 'email' ? 'text-[#CCFF00]' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Email
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setAuthTab('register'); setLoginError(''); }}
+                      className={`pb-3 pt-1 text-[11px] font-['Space_Grotesk'] font-bold uppercase tracking-wider transition-colors duration-200 text-center ${
+                        authTab === 'register' ? 'text-[#CCFF00]' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Đăng Ký
+                    </button>
+                  </div>
+
+                  {/* Animated Running Underline */}
+                  <div 
+                    className="absolute -bottom-[1px] h-[2px] bg-[#CCFF00] shadow-[0_0_12px_#CCFF00,0_0_4px_#CCFF00] transition-all duration-300 ease-out"
+                    style={{
+                      width: '33.333%',
+                      left: authTab === 'mssv' ? '0%' : authTab === 'email' ? '33.333%' : '66.666%',
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Forms */}
+              {loginStep === 'mfa' ? (
+                <form onSubmit={handleVerifyOtp} className="space-y-5 text-left">
+                  <div className="p-4 bg-white/[0.03] border border-white/10 rounded-none text-left">
+                    <p className="text-[10px] text-[#CCFF00] font-mono font-bold uppercase tracking-widest mb-1">
+                      Mã Xác Thực 2 Bước (MFA)
+                    </p>
+                    <p className="text-3xl font-mono font-bold text-white tracking-[0.25em]">{generatedOtp}</p>
+                    <p className="text-[10px] text-slate-400 mt-1 font-mono">Phiên xác thực bảo mật chuẩn AES</p>
+                  </div>
+
+                  <SpatialFloatingInput
+                    id="spatial-otp"
+                    label="Nhập mã OTP 6 số"
+                    type="text"
+                    maxLength={6}
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                    placeholder="------"
+                    className="font-mono text-xl tracking-[0.3em]"
+                    autoFocus
+                  />
+
+                  {loginError && <p className="text-red-400 text-xs font-semibold">{loginError}</p>}
+
+                  <SpatialSharpButton type="submit" loading={isAuthenticating}>
+                    Xác Nhận &amp; Vào Hệ Thống
+                  </SpatialSharpButton>
+
+                  <button 
+                    type="button" 
+                    onClick={() => { setLoginStep('login'); setLoginError(''); }} 
+                    className="w-full text-[10px] font-mono text-slate-500 font-bold uppercase hover:text-[#CCFF00] text-left tracking-wider transition-colors pt-1"
+                  >
+                    ← Quay lại bước trước
+                  </button>
+                </form>
+              ) : authTab === 'mssv' ? (
+                <form onSubmit={handleMssvLogin} className="space-y-4 text-left">
+                  <SpatialFloatingInput
+                    id="spatial-mssv"
+                    label="Mã Số Sinh Viên (MSSV)"
+                    type="text"
+                    value={mssvInput}
                     onChange={(e) => {
                       const val = e.target.value;
                       if (val && !/^\d*$/.test(val)) return;
                       if (val.length > 8) return;
                       setMssvInput(val);
-                    }} 
-                    placeholder="e.g. 25010001" 
-                    className={`saas-input w-full ${loginError.includes('MSSV') ? 'border-red-500/50' : ''}`} 
+                    }}
+                    placeholder="Ví dụ: 25010001"
+                    error={loginError.includes('MSSV')}
                   />
+
+                  <SpatialFloatingInput
+                    id="spatial-pass"
+                    label="Mật Khẩu"
+                    type="password"
+                    value={passInput}
+                    onChange={(e) => setPassInput(e.target.value)}
+                    placeholder="••••••••"
+                  />
+
+                  {loginError && <p className="text-red-400 text-xs font-semibold">{loginError}</p>}
+
+                  <div className="pt-2">
+                    <SpatialSharpButton type="submit" loading={isAuthenticating}>
+                      Đăng Nhập Với MSSV
+                    </SpatialSharpButton>
+                  </div>
+                </form>
+              ) : authTab === 'email' ? (
+                <form onSubmit={handleEmailLogin} className="space-y-4 text-left">
+                  <SpatialFloatingInput
+                    id="spatial-email"
+                    label="Email Sinh Viên / Cán Bộ"
+                    type="email"
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    placeholder="name@vnu.edu.vn"
+                  />
+
+                  <SpatialFloatingInput
+                    id="spatial-email-pass"
+                    label="Mật Khẩu"
+                    type="password"
+                    value={passInput}
+                    onChange={(e) => setPassInput(e.target.value)}
+                    placeholder="••••••••"
+                  />
+
+                  {loginError && <p className="text-red-400 text-xs font-semibold">{loginError}</p>}
+
+                  <div className="pt-2">
+                    <SpatialSharpButton type="submit" loading={isAuthenticating}>
+                      Đăng Nhập Email
+                    </SpatialSharpButton>
+                  </div>
+                </form>
+              ) : (
+                <form onSubmit={handleRegister} className="space-y-3 text-left">
+                  <div className="grid grid-cols-2 gap-3">
+                    <SpatialFloatingInput
+                      id="spatial-reg-name"
+                      label="Họ và Tên"
+                      type="text"
+                      value={regName}
+                      onChange={(e) => setRegName(e.target.value)}
+                      placeholder="Nguyễn Văn A"
+                    />
+                    <SpatialFloatingInput
+                      id="spatial-reg-mssv"
+                      label="MSSV (8 số)"
+                      type="text"
+                      maxLength={8}
+                      value={regMssv}
+                      onChange={(e) => setRegMssv(e.target.value.replace(/\D/g, ''))}
+                      placeholder="25010099"
+                    />
+                  </div>
+
+                  <SpatialFloatingInput
+                    id="spatial-reg-email"
+                    label="Email Sinh Viên"
+                    type="email"
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                    placeholder="student@vnu.edu.vn"
+                  />
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <SpatialFloatingInput
+                      id="spatial-reg-major"
+                      label="Chuyên Ngành"
+                      type="text"
+                      value={regMajor}
+                      onChange={(e) => setRegMajor(e.target.value)}
+                      placeholder="Sư phạm Toán"
+                    />
+                    <SpatialFloatingInput
+                      id="spatial-reg-pass"
+                      label="Mật Khẩu (≥6 ký tự)"
+                      type="password"
+                      value={regPass}
+                      onChange={(e) => setRegPass(e.target.value)}
+                      placeholder="••••••••"
+                    />
+                  </div>
+
+                  {loginError && <p className="text-red-400 text-xs font-semibold">{loginError}</p>}
+
+                  <div className="pt-2">
+                    <SpatialSharpButton type="submit" loading={isAuthenticating}>
+                      Tạo Tài Khoản &amp; Khởi Động
+                    </SpatialSharpButton>
+                  </div>
+                </form>
+              )}
+
+              {/* Quick Demo Access Bar */}
+              {loginStep === 'login' && (
+                <div className="mt-7 pt-5 border-t border-white/10 space-y-2.5 text-left">
+                  <p className="text-[10px] text-slate-500 font-['JetBrains_Mono'] font-mono font-bold uppercase tracking-widest text-left">
+                    Truy Cập Nhanh 1-Click Demo
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <button 
+                      type="button"
+                      onClick={() => handleQuickDemo('25010001')}
+                      disabled={isAuthenticating}
+                      className="p-3 bg-transparent rounded-none border border-dashed border-white/20 hover:border-[#CCFF00] hover:translate-x-1 text-left transition-all duration-200 group flex items-center gap-3 cursor-pointer"
+                    >
+                      <span className="text-xl select-none transition-transform duration-200 group-hover:scale-110">🦉</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-white group-hover:text-[#CCFF00] truncate font-['Space_Grotesk']">Bùi Mai Anh</p>
+                        <p className="text-[10px] text-slate-400 font-mono">25010001 · Lớp trưởng</p>
+                      </div>
+                    </button>
+
+                    <button 
+                      type="button"
+                      onClick={() => handleQuickDemo('25010002')}
+                      disabled={isAuthenticating}
+                      className="p-3 bg-transparent rounded-none border border-dashed border-white/20 hover:border-[#CCFF00] hover:translate-x-1 text-left transition-all duration-200 group flex items-center gap-3 cursor-pointer"
+                    >
+                      <span className="text-xl select-none transition-transform duration-200 group-hover:scale-110">🦉</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-white group-hover:text-[#CCFF00] truncate font-['Space_Grotesk']">Hoàng Diệu Anh</p>
+                        <p className="text-[10px] text-slate-400 font-mono">25010002 · Cán sự K25</p>
+                      </div>
+                    </button>
+                  </div>
+
+                  <div className="pt-2 flex items-center justify-between">
+                    <button 
+                      type="button" 
+                      onClick={seedDemoData} 
+                      className="text-[9px] font-mono text-slate-500 font-semibold hover:text-[#CCFF00] transition-colors uppercase tracking-wider"
+                    >
+                      Reset Dữ Liệu Seeds
+                    </button>
+                    <span className="text-[9px] font-mono text-slate-600">Spatial V2.5</span>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-gray-500 uppercase">Password</label>
-                  <input type="password" value={passInput} onChange={(e) => setPassInput(e.target.value)} placeholder="••••••••" className="saas-input w-full" />
-                </div>
-              </>
-            ) : (
-              <div className="space-y-6">
-                <div className="p-4 bg-brand-purple/5 border border-brand-purple/10 rounded-xl text-center">
-                  <p className="text-[10px] text-brand-purple font-bold uppercase tracking-widest mb-1">MFA Verification</p>
-                  <p className="text-3xl font-mono font-bold text-white tracking-[0.2em]">{generatedOtp}</p>
-                </div>
-                <input type="text" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="Enter OTP" className="saas-input w-full text-center text-xl font-mono tracking-widest" />
-                <button onClick={() => setLoginStep('login')} className="w-full text-[10px] text-gray-500 font-bold uppercase hover:text-white">Go back</button>
-              </div>
-            )}
-            
-            {loginError && <p className="text-red-500 text-[10px] font-bold text-center uppercase">{loginError}</p>}
-            
-            <button type="submit" disabled={isAuthenticating} className="saas-button-primary w-full h-12 flex items-center justify-center">
-              {isAuthenticating ? <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : (loginStep === 'login' ? 'Continue' : 'Verify')}
-            </button>
-            
-            <div className="text-center">
-              <button type="button" onClick={seedDemoData} className="text-[10px] text-gray-600 font-bold uppercase hover:text-brand-purple transition-colors">Initialize Demo System</button>
-            </div>
-          </form>
-        </motion.div>
+              )}
+            </motion.div>
+          </div>
+        </div>
+
+        {/* Full-screen Intro Overlay preview over Login background if triggered */}
+        <AppIntro 
+          isOpen={isIntroOpen} 
+          onClose={() => setIsIntroOpen(false)} 
+          studentName={student?.name}
+          onStartTour={() => setIsTourActive(true)}
+        />
+
+        <CyberToastContainer />
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-brand-bg text-gray-300 overflow-hidden font-sans">
-      {/* Sidebar Navigation */}
-      <aside className="w-64 border-r border-brand-border flex flex-col shrink-0">
+    <div className="flex h-screen bg-[#030509] text-gray-300 overflow-hidden font-sans">
+      {/* Sidebar Navigation - Transparent HUD Sidebar with Subtle Right Border */}
+      <aside className="w-64 bg-transparent border-r border-white/10 flex flex-col shrink-0 select-none">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-8">
             <Logo size={28} />
-            <span className="text-sm font-bold text-white tracking-tighter uppercase">Scholar Owl</span>
+            <div className="flex flex-col">
+              <span className="text-sm font-['Space_Grotesk'] font-extrabold text-white tracking-wider uppercase">Scholar Owl</span>
+              <span className="text-[9px] font-mono tracking-widest text-[#CCFF00]">HUD V2.5 // ONLINE</span>
+            </div>
           </div>
           
           <div className="space-y-1">
-             <NavButton icon={LayoutDashboard} label="Overview" active={view === 'overview'} onClick={() => setView('overview')} className="nav-overview-btn" />
-             <NavButton icon={MessageSquare} label="AI Support" active={view === 'chat'} onClick={() => setView('chat')} className="nav-ai-chat-btn" />
-             <NavButton icon={Stars} label="Cú Học Tập Azota" active={view === 'study-owl'} onClick={() => setView('study-owl')} className="study-owl-btn" />
-             <NavButton icon={GraduationCap} label="Dự Báo GPA" active={view === 'academic'} onClick={() => setView('academic')} className="academic-gpa-btn" />
-             <NavButton icon={Bell} label="Updates" badge={notifications.filter(n => !n.isRead).length} onClick={() => {}} />
-             <NavButton icon={Settings} label="Settings" />
+             <NavButton num="01" icon={LayoutDashboard} label="OVERVIEW" active={view === 'overview'} onClick={() => setView('overview')} className="nav-overview-btn" />
+             <NavButton num="02" icon={MessageSquare} label="AI SUPPORT" active={view === 'chat'} onClick={() => setView('chat')} className="nav-ai-chat-btn" />
+             <NavButton num="03" icon={Stars} label="CÚ HỌC TẬP AZOTA" active={view === 'study-owl'} onClick={() => setView('study-owl')} className="study-owl-btn" />
+             <NavButton num="04" icon={GraduationCap} label="DỰ BÁO GPA" active={view === 'academic'} onClick={() => setView('academic')} className="academic-gpa-btn" />
+             <NavButton num="05" icon={Bell} label="UPDATES" badge={notifications.filter(n => !n.isRead).length} onClick={() => setIsNotificationsOpen(true)} />
+             <NavButton num="06" icon={Settings} label="SETTINGS" />
           </div>
         </div>
 
-        <div className="mt-auto p-6 border-t border-brand-border space-y-4">
-          <div className="p-4 saas-card bg-[var(--brand-bg-white-ops)] flex items-center justify-between">
+        <div className="mt-auto p-6 border-t border-white/10 space-y-3">
+          <div className="p-3 bg-white/[0.02] border border-white/10 rounded-none flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className={`p-1.5 rounded-lg ${theme === 'dark' ? 'bg-brand-purple/10 text-brand-purple' : 'bg-brand-cyan/10 text-brand-cyan'}`}>
+              <div className="p-1 text-[#CCFF00]">
                 {theme === 'dark' ? <Moon size={14} /> : <Sun size={14} />}
               </div>
               <div>
-                <p className="text-[10px] font-bold text-gray-500 uppercase">Theme</p>
-                <p className="text-[9px] font-bold text-white uppercase">{theme}</p>
+                <p className="text-[9px] font-mono uppercase text-slate-400 tracking-wider">HUD Mode</p>
+                <p className="text-[10px] font-mono font-bold text-white uppercase">{theme}</p>
               </div>
             </div>
             <button 
               onClick={toggleTheme}
-              className="w-10 h-5 bg-white/5 rounded-full relative flex items-center px-1 transition-all border border-brand-border"
+              className="w-9 h-4 bg-black/60 rounded-none relative flex items-center px-0.5 transition-all border border-white/20"
             >
               <motion.div 
-                animate={{ x: theme === 'dark' ? 20 : 0 }}
+                animate={{ x: theme === 'dark' ? 18 : 0 }}
                 transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                className="w-3 h-3 bg-brand-purple rounded-full shadow-[0_0_10px_rgba(147,51,234,0.5)]"
+                className="w-2.5 h-2.5 bg-[#CCFF00] rounded-none shadow-[0_0_8px_#CCFF00]"
               />
             </button>
           </div>
 
-          <div className="p-4 saas-card bg-white/[0.02]">
-            <p className="text-[10px] font-bold text-gray-500 uppercase mb-2">Student Storage</p>
-            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-               <div className="w-2/3 h-full bg-brand-cyan" />
+          <div className="p-3 bg-white/[0.02] border border-white/10 rounded-none flex items-center gap-2.5">
+            <span className="w-1.5 h-1.5 rounded-none bg-[#CCFF00] animate-pulse shrink-0 shadow-[0_0_6px_#CCFF00]" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[9px] font-mono font-bold text-[#CCFF00] uppercase tracking-wider">Firestore &amp; Auth</p>
+              <p className="text-[9px] font-mono text-slate-400 truncate">
+                {firebaseUser ? (firebaseUser.email || `UID: ${firebaseUser.uid.slice(0, 8)}...`) : `MSSV: ${student?.mssv || 'Online'}`}
+              </p>
             </div>
-            <p className="text-[9px] text-gray-500 mt-2">6.2 GB of 10 GB used</p>
           </div>
           
-          <button onClick={() => signOut(auth).then(() => setIsLoggedIn(false))} className="flex items-center gap-2 text-xs font-semibold text-gray-500 hover:text-red-400 transition-colors px-2">
-            <LogOut size={14} />
-            Sign Out
+          <button 
+            onClick={() => setIsOutroOpen(true)} 
+            className="w-full flex items-center justify-center gap-2 py-2 text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 hover:text-red-400 hover:bg-white/[0.03] transition-colors border border-transparent hover:border-red-400/30"
+          >
+            <LogOut size={13} />
+            Đăng Xuất (Sign Out)
           </button>
         </div>
       </aside>
 
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 bg-brand-bg relative">
+      {/* Main Content Area with Sci-Fi Grid Background */}
+      <main className="flex-1 flex flex-col min-w-0 bg-[#030509] hud-grid-background relative">
         {view === 'chat' ? (
           <>
             <AnimatePresence>
@@ -902,49 +1457,45 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        <header className="h-16 px-8 border-b border-brand-border flex items-center justify-between bg-brand-bg/80 backdrop-blur-md z-10">
-               <div className="flex items-center gap-4 flex-1">
-                 <MessageSquare size={16} className="text-brand-purple" />
-                 <span className="text-sm font-bold text-white">AI Support Agent</span>
-                 <div className="px-2 py-0.5 bg-brand-emerald/10 text-brand-emerald text-[9px] font-bold rounded uppercase tracking-widest border border-brand-emerald/20">Live</div>
+        <header className="h-14 px-8 border-b border-white/10 flex items-center justify-between bg-[#070a10]/90 backdrop-blur-md z-10">
+               <div className="flex items-center gap-3 flex-1">
+                 <div className="w-2 h-2 bg-[#00FFFF] rounded-none shadow-[0_0_8px_#00FFFF] animate-pulse" />
+                 <span className="text-xs font-['Space_Grotesk'] font-bold text-white uppercase tracking-wider">NEURAL TERMINAL // AI SUPPORT</span>
+                 <div className="px-2 py-0.5 bg-[#CCFF00]/10 text-[#CCFF00] text-[9px] font-mono font-bold rounded-none uppercase tracking-widest border border-[#CCFF00]/30">ACTIVE STREAM</div>
                </div>
                
-               <div className="flex items-center gap-3">
+               <div className="flex items-center gap-2">
                   <button 
                     onClick={handleExportChat}
                     disabled={messages.length === 0}
-                    className="saas-button-secondary py-1.5 text-xs flex items-center gap-2 disabled:opacity-50"
+                    className="saas-button-secondary py-1 px-3 text-[10px] flex items-center gap-2 disabled:opacity-40"
                   >
-                    <FileText size={12} /> Export Chat
+                    <FileText size={11} className="text-[#00FFFF]" /> EXPORT LOG
                   </button>
-                  <button className="saas-button-secondary py-1.5 text-xs">History</button>
-                  <button className="saas-button-primary py-1.5 text-xs">New Chat</button>
+                  <button className="saas-button-secondary py-1 px-3 text-[10px]">HISTORY</button>
+                  <button onClick={() => setMessages([])} className="saas-button-primary py-1 px-3 text-[10px]">+ NEW SESSION</button>
                </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto px-8 py-8 no-scrollbar scroll-smooth">
-               <div className="max-w-3xl mx-auto">
+            <div className="flex-1 overflow-y-auto px-8 py-8 no-scrollbar scroll-smooth crt-terminal-scanlines relative">
+               {/* CRT Vignette Overlay to focus attention to the center */}
+               <div className="crt-vignette-overlay" />
+
+               <div className="max-w-3xl mx-auto relative z-10">
                  {messages.length === 0 ? (
                    <div className="h-full flex flex-col items-center justify-center py-20 text-center relative overflow-hidden">
-                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full opacity-10 pointer-events-none">
-                         <div 
-                            className="w-full h-full bg-center bg-no-repeat bg-contain"
-                            style={{ backgroundImage: 'url("https://images.unsplash.com/photo-1635070041078-e363dbe005cb?q=80&w=2670&auto=format&fit=crop")' }}
-                         />
-                      </div>
-                      
                       <div className="relative z-10">
-                        <div className="w-16 h-16 bg-brand-purple/10 rounded-2xl flex items-center justify-center text-brand-purple mb-8 mx-auto border border-brand-purple/20 shadow-[0_0_30px_rgba(124,58,237,0.2)]">
-                          <Logo size={40} />
+                        <div className="w-14 h-14 bg-black border border-[#CCFF00]/60 rounded-none flex items-center justify-center text-[#CCFF00] mb-6 mx-auto shadow-[0_0_20px_rgba(204,255,0,0.2)]">
+                          <Logo size={32} />
                         </div>
-                        <h2 className="text-3xl font-bold text-white mb-3 tracking-tight">System Online. How can I help?</h2>
-                        <p className="text-sm text-gray-500 max-w-md mx-auto mb-12 leading-relaxed">I have access to your academic records, course databases, and university resources. Ask me anything.</p>
+                        <h2 className="text-2xl font-extrabold font-['Space_Grotesk'] text-white mb-2 tracking-tight uppercase">Neural Terminal Online</h2>
+                        <p className="text-xs font-mono text-slate-400 max-w-md mx-auto mb-10 leading-relaxed">System connected to SMUT academic datastream. Input query or select a preconfigured vector below.</p>
                         
                         <div className="flex flex-wrap justify-center gap-2">
-                          <QuickPrompt text="Next Exam" onClick={() => handleSend("When is my next exam?")} />
-                          <QuickPrompt text="GPA Forecast" onClick={() => handleSend("Analyze my GPA and forecast next semester")} />
-                          <QuickPrompt text="Library Access" onClick={() => handleSend("How can I access digital library resources?")} />
-                          <QuickPrompt text="Tuition Review" onClick={() => handleSend("Check my tuition payment status")} />
+                          <QuickPrompt text="Next Exam Schedule" onClick={() => handleSend("When is my next exam?")} />
+                          <QuickPrompt text="GPA Forecast Model" onClick={() => handleSend("Analyze my GPA and forecast next semester")} />
+                          <QuickPrompt text="Digital Library Auth" onClick={() => handleSend("How can I access digital library resources?")} />
+                          <QuickPrompt text="Tuition Review Status" onClick={() => handleSend("Check my tuition payment status")} />
                         </div>
                       </div>
                    </div>
@@ -953,38 +1504,88 @@ export default function App() {
                      {messages.map(m => (
                        <MessageBubble key={m.id} message={m} studentName={student?.name || 'S'} />
                      ))}
-                     {isLoading && (
-                       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2 p-3 bg-brand-card rounded-lg w-fit border border-brand-border">
-                         <div className="w-1.5 h-1.5 bg-brand-purple rounded-full animate-bounce" />
-                         <div className="w-1.5 h-1.5 bg-brand-purple rounded-full animate-bounce [animation-delay:0.2s]" />
-                         <div className="w-1.5 h-1.5 bg-brand-purple rounded-full animate-bounce [animation-delay:0.4s]" />
+                     
+                     {/* AI Typing State Indicator */}
+                     {isLoading ? (
+                       <motion.div 
+                         initial={{ opacity: 0, y: 6 }} 
+                         animate={{ opacity: 1, y: 0 }} 
+                         className="p-3 bg-black border-l-2 border-[#CCFF00] rounded-none w-fit font-mono text-xs flex items-center gap-2.5 shadow-[0_0_20px_rgba(204,255,0,0.2)] mb-4"
+                       >
+                         <span className="text-[10px] font-bold text-[#00FFFF] tracking-widest font-mono">[NEURAL_CORE]</span>
+                         <span className="text-[#CCFF00] font-bold tracking-widest font-mono">[PROCESSING...]</span>
+                         <span className="inline-block w-2.5 h-4 bg-[#CCFF00] animate-pulse shadow-[0_0_8px_#CCFF00]" />
+                       </motion.div>
+                     ) : (
+                       <motion.div 
+                         initial={{ opacity: 0 }} 
+                         animate={{ opacity: 1 }} 
+                         className="py-1 px-3 bg-black/60 border border-white/10 rounded-none w-fit font-mono text-[10px] flex items-center gap-2 mb-4 text-slate-400"
+                       >
+                         <span className="w-1.5 h-1.5 bg-[#00FFFF] shadow-[0_0_6px_#00FFFF] animate-pulse" />
+                         <span className="text-[#00FFFF] font-bold tracking-widest font-mono">[SYSTEM_READY]</span>
+                         <span className="text-slate-500 font-mono">// STANDBY FOR QUERY</span>
                        </motion.div>
                      )}
+                     
                      <div ref={chatEndRef} />
                    </>
                  )}
                </div>
             </div>
 
-            <div className="p-8">
+            <div className="p-6 border-t border-white/10 bg-[#070a10]/85 backdrop-blur-md relative z-30">
                <div className="max-w-3xl mx-auto relative group">
-                  <input 
-                    type="text" 
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                    placeholder="Message AI assistant..." 
-                    className="saas-input w-full py-4 pr-12 text-sm bg-brand-card border-brand-border group-hover:border-white/10"
-                  />
-                  <button 
-                    onClick={() => handleSend()}
-                    disabled={!input.trim() || isLoading}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-brand-purple hover:bg-brand-purple/10 rounded-lg transition-all disabled:opacity-30"
-                  >
-                    <Send size={18} />
-                  </button>
+                  <div className={`relative flex items-center bg-black/90 border transition-all duration-200 ${
+                    isInputFocused 
+                      ? 'border-[#CCFF00] shadow-[0_0_20px_rgba(204,255,0,0.25)]' 
+                      : 'border-[#CCFF00]/40 hover:border-[#CCFF00]/70'
+                  }`}>
+                     {/* Blinking prompt cursor at the beginning of the line */}
+                     <div className="pl-4 pr-1.5 flex items-center gap-1.5 select-none font-mono">
+                       <span className="text-xs font-bold text-[#00FFFF] font-mono">&gt;</span>
+                       {isInputFocused && (
+                         <span className="w-1.5 h-3.5 bg-[#CCFF00] animate-pulse shadow-[0_0_6px_#CCFF00]" />
+                       )}
+                     </div>
+
+                     <input 
+                       type="text" 
+                       value={input}
+                       onFocus={() => setIsInputFocused(true)}
+                       onBlur={() => setIsInputFocused(false)}
+                       onChange={(e) => setInput(e.target.value)}
+                       onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                       placeholder={placeholderText || "ENTER COMMAND OR QUERY..."} 
+                       className="w-full py-3.5 pl-1 pr-16 text-xs font-mono bg-transparent text-white placeholder:text-slate-500 rounded-none outline-none caret-[#CCFF00]"
+                     />
+
+                     {/* Enlarged Send button */}
+                     <button 
+                       onClick={() => handleSend()}
+                       disabled={!input.trim() || isLoading}
+                       className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-black border-2 border-[#CCFF00] hover:bg-[#CCFF00] text-[#CCFF00] hover:text-black rounded-none transition-all duration-200 hover:shadow-[0_0_20px_#CCFF00] active:scale-95 disabled:opacity-20 disabled:pointer-events-none group/send"
+                       title="Transmit Neural Command"
+                     >
+                       {/* Enlarged neon arrowhead triangle */}
+                       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="transition-transform group-hover/send:translate-x-0.5">
+                         <polygon points="5,3 19,12 5,21 8,12" />
+                       </svg>
+                     </button>
+                  </div>
                </div>
-               <p className="text-[9px] text-center text-gray-700 mt-4 font-bold uppercase tracking-[0.2em]">UED Intelligence System • v3.4.0</p>
+               <div className="flex flex-col items-center gap-1 mt-3">
+                 <p className="text-[10px] font-mono text-slate-400 text-center max-w-xl">
+                   🦉 SMUT Neural Co-pilot: Tra cứu và phân tích học vụ thông minh. Đối chiếu cổng thông tin chính thức ĐH Sư phạm.
+                 </p>
+                 <button 
+                   onClick={() => setIsPrivacyOpen(true)}
+                   className="text-[9px] font-mono text-[#00FFFF] hover:underline uppercase tracking-wider"
+                 >
+                   Chính sách bảo mật dữ liệu học viên (Nghị định 13/2023/NĐ-CP)
+                 </button>
+               </div>
+               <p className="text-[9px] font-mono text-center text-slate-600 mt-2 font-bold uppercase tracking-[0.2em]">SMUT NEURAL ENGINE • V3.4.0 HUD</p>
             </div>
           </>
         ) : view === 'study-owl' ? (
@@ -994,7 +1595,7 @@ export default function App() {
                 <p className="text-[10px] font-bold text-brand-purple uppercase tracking-[0.3em] mb-2">Học tập đỉnh cao 🦉</p>
                 <h2 className="text-4xl font-extrabold text-white tracking-tighter">Trợ Lý Cú Học Tập (Azota)</h2>
               </div>
-              <StudyOwlAzota studentName={student?.name} />
+              <StudyOwlAzota studentName={student?.name} studentId={student?.mssv} />
             </div>
           </div>
         ) : view === 'academic' ? (
@@ -1056,47 +1657,58 @@ export default function App() {
                   </motion.div>
                 )}
               </AnimatePresence>
-              <div className="flex items-end justify-between">
+              <div className="flex items-end justify-between border-b border-white/10 pb-5">
                 <div>
-                  <p className="text-[10px] font-bold text-brand-purple uppercase tracking-[0.3em] mb-2">Welcome Back,</p>
-                  <h2 className="text-4xl font-bold text-brand-text-primary tracking-tighter">{student?.name.split(' ')[0]}</h2>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="w-1.5 h-1.5 bg-[#CCFF00] rounded-none shadow-[0_0_8px_#CCFF00]" />
+                    <p className="text-[10px] font-mono font-bold text-[#CCFF00] uppercase tracking-[0.25em]">AUTHENTICATED // STUDENT PORTAL</p>
+                  </div>
+                  <h2 className="text-4xl font-extrabold font-['Space_Grotesk'] text-white tracking-tight">{student?.name.split(' ')[0]}</h2>
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Current Semester</p>
-                  <p className="text-sm font-bold text-brand-text-primary uppercase">Học kỳ 2 · 2025-2026</p>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsIntroOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-transparent hover:bg-white/[0.04] border border-dashed border-white/20 hover:border-[#CCFF00] rounded-none text-xs font-mono font-bold text-slate-300 hover:text-[#CCFF00] transition-all"
+                    title="Xem lại hướng dẫn giới thiệu hệ thống"
+                  >
+                    <HelpCircle size={13} className="text-[#00FFFF]" />
+                    <span>HƯỚNG DẪN HỆ THỐNG</span>
+                  </button>
+                  <div className="text-right">
+                    <p className="text-[9px] font-mono text-slate-500 uppercase tracking-widest mb-0.5">SEMESTER STATUS</p>
+                    <p className="text-xs font-mono font-bold text-[#00FFFF] uppercase">HK2 · 2025-2026</p>
+                  </div>
                 </div>
               </div>
 
-              {/* SMUT AI Flying Owl Mascot */}
-              <div className="saas-card p-5 bg-gradient-to-r from-brand-purple/15 to-brand-cyan/15 border border-brand-purple/20 rounded-2xl relative overflow-hidden flex flex-col md:flex-row items-center gap-5">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-brand-purple/20 rounded-full blur-2xl pointer-events-none" />
-                <div className="absolute bottom-0 left-0 w-24 h-24 bg-brand-cyan/20 rounded-full blur-2xl pointer-events-none" />
-                
+              {/* SMUT AI Flying Owl Mascot - HUD Sci-Fi Card */}
+              <div className="p-5 bg-black border border-[#CCFF00]/40 rounded-none relative overflow-hidden flex flex-col md:flex-row items-center gap-5 shadow-[0_0_25px_rgba(204,255,0,0.06)]">
                 <motion.div 
-                  animate={{ y: [0, -6, 0] }}
+                  animate={{ y: [0, -4, 0] }}
                   transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                  className="shrink-0 p-3 bg-[#0d1222]/80 border border-brand-cyan/25 rounded-xl relative shadow-lg flex items-center justify-center text-4xl cursor-pointer group hover:border-brand-purple/40 transition-colors"
+                  className="shrink-0 p-3 bg-white/[0.03] border border-[#00FFFF]/50 rounded-none relative shadow-lg flex items-center justify-center text-3xl cursor-pointer group hover:border-[#CCFF00] transition-colors"
                   onClick={() => fetchDashboardMascotGreeting(student)}
                 >
-                  <span className="animate-bounce select-none">🦉</span>
-                  <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-cyan opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-brand-cyan"></span>
+                  <span className="select-none">🦉</span>
+                  <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-none bg-[#CCFF00] opacity-75"></span>
+                    <span className="relative inline-flex rounded-none h-2 w-2 bg-[#CCFF00]"></span>
                   </span>
                 </motion.div>
 
                 <div className="space-y-1.5 flex-1 relative z-10 text-center md:text-left">
                   <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
-                    <span className="text-[10px] font-mono tracking-widest font-bold text-brand-purple uppercase">Scholar Owl Mascot</span>
-                    <span className="px-1.5 py-0.5 text-[8px] font-extrabold uppercase bg-brand-cyan/10 border border-brand-cyan/25 text-brand-cyan rounded">Trợ lý đồng hành 🌟</span>
+                    <span className="text-[10px] font-mono tracking-widest font-bold text-[#CCFF00] uppercase">SCHOLAR OWL · LIVE CO-PILOT</span>
+                    <span className="px-1.5 py-0.5 text-[8px] font-mono font-bold uppercase bg-[#00FFFF]/10 border border-[#00FFFF]/40 text-[#00FFFF] rounded-none">AI ACTIVE 🌟</span>
                   </div>
                   
                   {isGeneratingDashboardGreeting ? (
-                    <p className="text-xs text-gray-400 italic">Cú Flying Owl đang kết nối hệ thống để chuẩn bị lời chúc... 🔮</p>
+                    <p className="text-xs font-mono text-slate-400 italic">Cú Co-pilot đang đồng bộ thông tin... 🦉</p>
                   ) : (
-                    <p className="text-xs font-semibold text-gray-200 leading-relaxed italic">
+                    <div className="p-3 bg-white/[0.02] backdrop-blur-md border border-[#00FFFF]/30 rounded-none text-xs font-['Plus_Jakarta_Sans'] font-medium text-slate-200 leading-relaxed">
                       "{highlightVietnameseTerms(dashboardGreeting)}"
-                    </p>
+                    </div>
                   )}
                 </div>
 
@@ -1104,214 +1716,221 @@ export default function App() {
                   <button 
                     onClick={() => fetchDashboardMascotGreeting(student)}
                     disabled={isGeneratingDashboardGreeting}
-                    className="p-2 bg-white/5 border border-white/10 hover:border-brand-purple/35 hover:bg-white/10 rounded-xl text-xs font-bold text-white transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-95 animate-pulse hover:animate-none"
+                    className="p-2.5 bg-transparent border border-white/20 hover:border-[#CCFF00] hover:text-[#CCFF00] rounded-none text-xs font-mono font-bold text-white transition-all flex items-center justify-center gap-1.5"
                     title="Nói câu nữa đi Cú"
                   >
-                    <Stars size={13} className="text-brand-purple" />
-                    <span className="md:hidden">Nói câu nữa đi Cú</span>
+                    <Stars size={13} className="text-[#CCFF00]" />
+                    <span className="md:hidden">Nói câu nữa</span>
                   </button>
                 </div>
               </div>
 
               {/* Handholding Owl Tutorial Activation Card */}
-              <div className="flex flex-col md:flex-row items-center justify-between bg-white/[0.01] border border-brand-border/40 rounded-2xl p-4 gap-4">
+              <div className="flex flex-col md:flex-row items-center justify-between bg-black/50 border border-white/10 rounded-none p-4 gap-4">
                 <div className="flex items-center gap-3">
-                  <span className="text-3xl animate-bounce">🦉</span>
+                  <span className="text-2xl select-none">🦉</span>
                   <div>
-                    <span className="text-xs font-bold text-white block">Bạn có muốn tớ hướng dẫn cầm tay chỉ việc sử dụng ứng dụng?</span>
-                    <span className="text-[10px] text-gray-500 block mt-0.5">Tớ là Cú học thuật, nhấp vào nút dưới đây tớ sẽ giới thiệu các khu vực chức năng chính!</span>
+                    <span className="text-xs font-['Space_Grotesk'] font-bold text-white uppercase tracking-wider block">Kích hoạt chế độ Tour trải nghiệm không gian học vụ?</span>
+                    <span className="text-[10px] font-mono text-slate-400 block mt-0.5">Cú học thuật sẽ đưa bạn qua các phân khu chức năng trọng yếu.</span>
                   </div>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => setIsIntroOpen(true)}
-                    className="p-1 px-3 border border-brand-border rounded-lg text-[9px] font-bold text-gray-400 hover:text-white hover:bg-white/10 transition-colors uppercase"
+                    className="px-3 py-1.5 border border-white/15 rounded-none text-[9px] font-mono font-bold text-slate-300 hover:text-[#CCFF00] hover:border-[#CCFF00] transition-colors uppercase flex items-center gap-1"
+                    title="Xem lại hướng dẫn giới thiệu hệ thống"
                   >
-                    Xem lại Intro
+                    <HelpCircle size={11} className="text-[#00FFFF]" />
+                    Xem Intro
+                  </button>
+                  <button
+                    onClick={() => setIsOutroOpen(true)}
+                    className="px-3 py-1.5 border border-white/15 rounded-none text-[9px] font-mono font-bold text-slate-400 hover:text-red-400 hover:border-red-400 transition-colors uppercase"
+                  >
+                    Xem Outro
                   </button>
                   <button
                     onClick={() => setIsTourActive(true)}
-                    className="p-1.5 px-3.5 bg-brand-purple text-white text-[9px] font-bold rounded-lg hover:bg-brand-purple/95 transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-lg border border-white/5"
+                    className="px-3 py-1.5 bg-[#CCFF00] text-black text-[9px] font-['Space_Grotesk'] font-bold rounded-none hover:bg-white transition-all uppercase tracking-wider flex items-center gap-1.5"
                   >
-                    <Compass size={11} /> Tour hướng dẫn Cú nhỏ
+                    <Compass size={11} /> Bắt đầu Tour HUD
                   </button>
                 </div>
               </div>
 
               {/* Grid 1: Main Overview */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="md:col-span-2 saas-card p-6 bg-brand-card border-white/5 relative overflow-hidden group academic-standing-card">
-                  <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
-                    <TrendingUp size={120} />
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div className="md:col-span-2 saas-card p-6 bg-[#070a10] border border-white/10 relative overflow-hidden group academic-standing-card">
                   <div className="relative z-10">
                     <div className="flex items-center justify-between mb-8">
-                      <h3 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2">
-                        <Stars size={14} className="text-brand-purple" />
-                        Academic Standing
+                      <h3 className="text-xs font-['JetBrains_Mono'] font-bold text-white uppercase tracking-[0.2em] flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 bg-[#CCFF00] rounded-none shadow-[0_0_8px_#CCFF00]" />
+                        ACADEMIC STANDING
                       </h3>
-                      <span className="px-2 py-1 bg-brand-purple/10 text-brand-purple text-[9px] font-bold rounded uppercase border border-brand-purple/20">Distinction</span>
+                      <span className="px-2 py-0.5 bg-[#CCFF00]/10 text-[#CCFF00] text-[9px] font-mono font-bold rounded-none uppercase border border-[#CCFF00]/30">DISTINCTION</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-8">
-                      <div>
-                        <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">CGPA</p>
-                        <p className="text-3xl font-bold text-brand-text-primary">3.56</p>
-                        <p className="text-[9px] text-brand-emerald mt-1 font-bold">+0.12 ↑</p>
+                    <div className="grid grid-cols-3 gap-6">
+                      <div className="border-l border-white/10 pl-4">
+                        <p className="text-[10px] font-['JetBrains_Mono'] font-bold text-slate-400 uppercase tracking-widest mb-1">CURRENT GPA</p>
+                        <p className="text-4xl font-extrabold font-['Space_Grotesk'] text-[#CCFF00] tracking-tight">{student?.gpa !== undefined ? student.gpa.toFixed(2) : '3.56'}</p>
+                        <p className="text-[9px] font-mono text-[#00FFFF] mt-1 font-bold">+0.12 ↑ Tăng trưởng</p>
                       </div>
-                      <div>
-                        <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Credits</p>
-                        <p className="text-3xl font-bold text-white">42</p>
-                        <p className="text-[9px] text-gray-500 mt-1 uppercase">Level 2</p>
+                      <div className="border-l border-white/10 pl-4">
+                        <p className="text-[10px] font-['JetBrains_Mono'] font-bold text-slate-400 uppercase tracking-widest mb-1">TOTAL CREDITS</p>
+                        <p className="text-4xl font-extrabold font-['Space_Grotesk'] text-[#CCFF00] tracking-tight">{student?.credits ?? 42}</p>
+                        <p className="text-[9px] font-mono text-slate-400 mt-1 uppercase">LEVEL 2 · ĐẠT</p>
                       </div>
-                      <div>
-                        <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Rank</p>
-                        <p className="text-3xl font-bold text-white">#12</p>
-                        <p className="text-[9px] text-gray-500 mt-1 uppercase">Top 5%</p>
+                      <div className="border-l border-white/10 pl-4">
+                        <p className="text-[10px] font-['JetBrains_Mono'] font-bold text-slate-400 uppercase tracking-widest mb-1">COHORT RANK</p>
+                        <p className="text-4xl font-extrabold font-['Space_Grotesk'] text-[#CCFF00] tracking-tight">#12</p>
+                        <p className="text-[9px] font-mono text-[#00FFFF] mt-1 uppercase">TOP 5% KHÓA K25</p>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="saas-card p-6 bg-gradient-to-br from-brand-purple/20 to-brand-cyan/20 border-white/5 flex flex-col justify-between">
+                <div className="saas-card p-6 bg-[#070a10] border border-white/10 flex flex-col justify-between">
                   <div>
-                    <h3 className="text-sm font-bold text-white uppercase tracking-widest mb-4">Quick Actions</h3>
+                    <h3 className="text-xs font-['JetBrains_Mono'] font-bold text-white uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-[#00FFFF] rounded-none shadow-[0_0_8px_#00FFFF]" />
+                      QUICK ACTIONS
+                    </h3>
                     <div className="space-y-2">
-                      <button className="w-full py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-bold text-white transition-all text-left px-3 flex items-center justify-between group">
-                        Registration <ChevronRight size={12} className="group-hover:translate-x-1 transition-transform" />
+                      <button className="w-full py-2.5 bg-white/[0.02] hover:bg-white/[0.06] rounded-none border border-white/10 hover:border-[#CCFF00] text-xs font-['Space_Grotesk'] font-bold text-white hover:text-[#CCFF00] transition-all text-left px-3 flex items-center justify-between group">
+                        Đăng ký môn học <ChevronRight size={12} className="group-hover:translate-x-1 transition-transform" />
                       </button>
-                      <button className="w-full py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-bold text-white transition-all text-left px-3 flex items-center justify-between group">
-                        Transcript <ChevronRight size={12} className="group-hover:translate-x-1 transition-transform" />
+                      <button className="w-full py-2.5 bg-white/[0.02] hover:bg-white/[0.06] rounded-none border border-white/10 hover:border-[#CCFF00] text-xs font-['Space_Grotesk'] font-bold text-white hover:text-[#CCFF00] transition-all text-left px-3 flex items-center justify-between group">
+                        Tra cứu bảng điểm <ChevronRight size={12} className="group-hover:translate-x-1 transition-transform" />
                       </button>
-                      <button className="w-full py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-bold text-white transition-all text-left px-3 flex items-center justify-between group">
-                        Certificates <ChevronRight size={12} className="group-hover:translate-x-1 transition-transform" />
+                      <button className="w-full py-2.5 bg-white/[0.02] hover:bg-white/[0.06] rounded-none border border-white/10 hover:border-[#CCFF00] text-xs font-['Space_Grotesk'] font-bold text-white hover:text-[#CCFF00] transition-all text-left px-3 flex items-center justify-between group">
+                        Chứng chỉ học tập <ChevronRight size={12} className="group-hover:translate-x-1 transition-transform" />
                       </button>
                     </div>
                   </div>
-                  <div className="mt-4 pt-4 border-t border-white/5">
-                    <p className="text-[9px] text-gray-400 font-medium">Last Login: {new Date().toLocaleTimeString()}</p>
+                  <div className="mt-4 pt-3 border-t border-white/10">
+                    <p className="text-[9px] font-mono text-slate-500 uppercase tracking-wider">Sync Timestamp: {new Date().toLocaleTimeString()}</p>
                   </div>
                 </div>
               </div>
 
               {/* Grid 2: Academic Calendar (Major Feature) */}
-              <div className="saas-card bg-brand-card border-white/5 overflow-hidden calendar-widget-card">
-                <div className="p-6 border-b border-brand-border flex items-center justify-between bg-white/[0.01]">
+              <div className="saas-card bg-[#070a10] border border-white/10 overflow-hidden calendar-widget-card">
+                <div className="p-5 border-b border-white/10 flex items-center justify-between bg-white/[0.01]">
                    <div className="flex items-center gap-3">
-                     <div className="w-10 h-10 rounded-xl bg-brand-cyan/10 flex items-center justify-center text-brand-cyan shadow-[0_0_20px_rgba(6,182,212,0.1)]">
-                       <Calendar size={20} />
+                     <div className="w-9 h-9 rounded-none bg-[#00FFFF]/10 border border-[#00FFFF]/30 flex items-center justify-center text-[#00FFFF]">
+                       <Calendar size={18} />
                      </div>
                      <div>
-                       <h3 className="text-sm font-bold text-white uppercase tracking-widest">Academic Calendar</h3>
-                       <p className="text-[10px] text-gray-500 font-medium">Important Semester Deadlines & Events</p>
+                       <h3 className="text-xs font-['JetBrains_Mono'] font-bold text-white uppercase tracking-[0.2em]">ACADEMIC CALENDAR</h3>
+                       <p className="text-[10px] font-mono text-slate-400">Important Deadlines &amp; Milestone Events</p>
                      </div>
                    </div>
                    <div className="flex items-center gap-2">
-                     <button className="saas-button-secondary py-1 text-[9px] uppercase tracking-wider font-bold">Upcoming</button>
-                     <button className="saas-button-secondary py-1 text-[9px] uppercase tracking-wider font-bold opacity-50">Full Year</button>
+                     <button className="px-2 py-1 bg-white/[0.03] border border-white/10 rounded-none text-[9px] font-mono font-bold uppercase tracking-wider text-white hover:border-[#CCFF00] hover:text-[#CCFF00]">Upcoming</button>
+                     <button className="px-2 py-1 bg-white/[0.03] border border-white/10 rounded-none text-[9px] font-mono font-bold uppercase tracking-wider text-slate-500 hover:text-white">Full Year</button>
                    </div>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-brand-border">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-white/10">
                   {calendarEvents.length === 0 ? (
                     <div className="col-span-4 py-20 text-center">
-                      <p className="text-sm text-gray-600">Syncing academic schedule...</p>
+                      <p className="text-xs font-mono text-slate-500">Syncing academic schedule...</p>
                     </div>
                   ) : (
                     calendarEvents.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(0, 4).map((event) => (
-                      <div key={event.id} className="p-6 hover:bg-white/[0.02] transition-colors relative group overflow-hidden">
-                        <div className={`absolute top-0 right-0 w-16 h-16 -mr-4 -mt-4 opacity-[0.03] group-hover:opacity-[0.07] transition-opacity`}>
-                          {event.type === 'exam' ? <AlertCircle size={64} /> : event.type === 'registration' ? <Plus size={64} /> : <Clock size={64} />}
-                        </div>
-                        
-                        <div className="mb-4">
-                           <span className={`text-[8px] font-bold uppercase tracking-[0.2em] px-2 py-0.5 rounded border ${
-                             event.type === 'exam' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 
-                             event.type === 'registration' ? 'bg-brand-cyan/10 text-brand-cyan border-brand-cyan/20' :
-                             event.type === 'holiday' ? 'bg-brand-emerald/10 text-brand-emerald border-brand-emerald/20' :
-                             'bg-brand-purple/10 text-brand-purple border-brand-purple/20'
+                      <div key={event.id} className="p-5 hover:bg-white/[0.02] transition-colors relative group overflow-hidden">
+                        <div className="mb-3">
+                           <span className={`text-[8px] font-mono font-bold uppercase tracking-[0.2em] px-2 py-0.5 rounded-none border ${
+                             event.type === 'exam' ? 'bg-red-500/10 text-red-400 border-red-500/30' : 
+                             event.type === 'registration' ? 'bg-[#00FFFF]/10 text-[#00FFFF] border-[#00FFFF]/30' :
+                             event.type === 'holiday' ? 'bg-[#CCFF00]/10 text-[#CCFF00] border-[#CCFF00]/30' :
+                             'bg-white/10 text-white border-white/20'
                            }`}>
                              {event.type}
                            </span>
                         </div>
                         
-                        <div className="space-y-3">
-                           <h4 className="text-xs font-bold text-white leading-snug h-8 line-clamp-2">{event.title}</h4>
-                           <div className="flex items-center gap-2 text-gray-500">
-                             <Calendar size={10} />
+                        <div className="space-y-2">
+                           <h4 className="text-xs font-bold font-['Space_Grotesk'] text-white leading-snug h-8 line-clamp-2">{event.title}</h4>
+                           <div className="flex items-center gap-2 text-slate-400">
+                             <Calendar size={10} className="text-[#00FFFF]" />
                              <span className="text-[10px] font-mono">{new Date(event.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
                            </div>
-                           <p className="text-[10px] text-gray-500 line-clamp-2 leading-relaxed h-10">{event.description}</p>
+                           <p className="text-[10px] text-slate-400 font-sans line-clamp-2 leading-relaxed h-10">{event.description}</p>
                         </div>
 
-                        <div className="mt-6">
-                           <button className="text-[9px] font-bold text-brand-purple uppercase flex items-center gap-1 hover:gap-2 transition-all">
+                        <div className="mt-4">
+                           <button className="text-[9px] font-mono font-bold text-[#CCFF00] uppercase flex items-center gap-1 hover:gap-2 transition-all">
                              View Details <ChevronRight size={10} />
                            </button>
                         </div>
                         
                         {event.priority === 'high' && (
-                          <div className="absolute top-6 right-6 w-1 h-1 rounded-full bg-red-400 animate-ping" />
+                          <div className="absolute top-4 right-4 w-1.5 h-1.5 rounded-none bg-red-400 shadow-[0_0_6px_red]" />
                         )}
                       </div>
                     ))
                   )}
                 </div>
                 
-                <div className="p-4 bg-white/[0.01] border-t border-brand-border text-center">
-                   <button className="text-[10px] font-bold text-gray-500 uppercase hover:text-white transition-colors tracking-widest">
+                <div className="p-3 bg-white/[0.01] border-t border-white/10 text-center">
+                   <button className="text-[9px] font-mono font-bold text-slate-400 uppercase hover:text-[#CCFF00] transition-colors tracking-widest">
                      Download Official Calendar (PDF)
                    </button>
                 </div>
               </div>
 
               {/* Announcements Section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-8">
-                 <div className="saas-card p-6 bg-brand-card border-white/5">
-                   <h3 className="text-sm font-bold text-white uppercase tracking-widest mb-6 flex items-center justify-between">
-                     Recent Campus News
-                     <button className="text-[10px] font-bold text-brand-cyan lowercase hover:underline">view all</button>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pb-8">
+                 <div className="saas-card p-6 bg-[#070a10] border border-white/10">
+                   <h3 className="text-xs font-['JetBrains_Mono'] font-bold text-white uppercase tracking-[0.2em] mb-6 flex items-center justify-between">
+                     <span>CAMPUS DISPATCHES</span>
+                     <button className="text-[9px] font-mono font-bold text-[#00FFFF] lowercase hover:underline">view all</button>
                    </h3>
-                   <div className="space-y-6">
-                      <div className="flex gap-4 group cursor-pointer border-b border-brand-border pb-4 last:border-0 last:pb-0">
-                        <div className="w-12 h-12 bg-white/5 rounded-lg flex-shrink-0 flex items-center justify-center font-bold text-gray-500 group-hover:bg-brand-purple/20 group-hover:text-brand-purple transition-all">05</div>
+                   <div className="space-y-4">
+                      <div className="flex gap-4 group cursor-pointer border-b border-white/10 pb-4 last:border-0 last:pb-0">
+                        <div className="w-10 h-10 bg-white/[0.03] border border-white/10 rounded-none flex-shrink-0 flex items-center justify-center font-mono font-bold text-slate-400 group-hover:border-[#CCFF00] group-hover:text-[#CCFF00] transition-all">05</div>
                         <div>
-                          <h4 className="text-xs font-bold text-white group-hover:text-brand-purple transition-colors mb-1">New Library Operating Hours for Finals Week</h4>
-                          <p className="text-[10px] text-gray-500">Starting next Monday, Main Library will be open 24/7 with enhanced security.</p>
+                          <h4 className="text-xs font-bold font-['Space_Grotesk'] text-white group-hover:text-[#CCFF00] transition-colors mb-1">New Library Operating Hours for Finals Week</h4>
+                          <p className="text-[10px] text-slate-400 font-sans">Starting next Monday, Main Library will be open 24/7 with enhanced security.</p>
                         </div>
                       </div>
-                      <div className="flex gap-4 group cursor-pointer border-b border-brand-border pb-4 last:border-0 last:pb-0">
-                        <div className="w-12 h-12 bg-white/5 rounded-lg flex-shrink-0 flex items-center justify-center font-bold text-gray-500 group-hover:bg-brand-purple/20 group-hover:text-brand-purple transition-all">03</div>
+                      <div className="flex gap-4 group cursor-pointer border-b border-white/10 pb-4 last:border-0 last:pb-0">
+                        <div className="w-10 h-10 bg-white/[0.03] border border-white/10 rounded-none flex-shrink-0 flex items-center justify-center font-mono font-bold text-slate-400 group-hover:border-[#CCFF00] group-hover:text-[#CCFF00] transition-all">03</div>
                         <div>
-                          <h4 className="text-xs font-bold text-white group-hover:text-brand-purple transition-colors mb-1">Voluntary Health Checkup Campaign</h4>
-                          <p className="text-[10px] text-gray-500">Free screening for all students at Building A1 Health Center.</p>
+                          <h4 className="text-xs font-bold font-['Space_Grotesk'] text-white group-hover:text-[#CCFF00] transition-colors mb-1">Voluntary Health Checkup Campaign</h4>
+                          <p className="text-[10px] text-slate-400 font-sans">Free screening for all students at Building A1 Health Center.</p>
                         </div>
                       </div>
                    </div>
                  </div>
 
-                 <div className="saas-card p-6 bg-brand-card border-white/5">
-                    <h3 className="text-sm font-bold text-white uppercase tracking-widest mb-6">Upcoming Schedule</h3>
-                    <div className="space-y-4">
-                       <div className="p-3 bg-white/[0.02] border border-brand-border rounded-xl flex items-center justify-between">
+                 <div className="saas-card p-6 bg-[#070a10] border border-white/10">
+                    <h3 className="text-xs font-['JetBrains_Mono'] font-bold text-white uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-[#CCFF00] rounded-none shadow-[0_0_8px_#CCFF00]" />
+                      UPCOMING TIMETABLE
+                    </h3>
+                    <div className="space-y-3">
+                       <div className="p-3 bg-white/[0.02] border border-white/10 rounded-none flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                             <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center"><Clock size={16} /></div>
+                             <div className="w-7 h-7 rounded-none bg-[#CCFF00]/10 text-[#CCFF00] border border-[#CCFF00]/30 flex items-center justify-center"><Clock size={14} /></div>
                              <div>
-                               <p className="text-xs font-bold text-white">Software Architecture</p>
-                               <p className="text-[9px] text-gray-500">Building C · Room 302</p>
+                               <p className="text-xs font-bold font-['Space_Grotesk'] text-white">Software Architecture</p>
+                               <p className="text-[9px] font-mono text-slate-400">Building C · Room 302</p>
                              </div>
                           </div>
-                          <p className="text-[10px] font-mono text-gray-400">08:00 AM</p>
+                          <p className="text-[10px] font-mono font-bold text-[#CCFF00]">08:00 AM</p>
                        </div>
-                       <div className="p-3 bg-white/[0.02] border border-brand-border rounded-xl flex items-center justify-between">
+                       <div className="p-3 bg-white/[0.02] border border-white/10 rounded-none flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                             <div className="w-8 h-8 rounded-lg bg-brand-purple/10 text-brand-purple flex items-center justify-center"><Clock size={16} /></div>
+                             <div className="w-7 h-7 rounded-none bg-[#00FFFF]/10 text-[#00FFFF] border border-[#00FFFF]/30 flex items-center justify-center"><Clock size={14} /></div>
                              <div>
-                               <p className="text-xs font-bold text-white">Human Computer Interaction</p>
-                               <p className="text-[9px] text-gray-500">Building E · Room 501</p>
+                               <p className="text-xs font-bold font-['Space_Grotesk'] text-white">Human Computer Interaction</p>
+                               <p className="text-[9px] font-mono text-slate-400">Building E · Room 501</p>
                              </div>
                           </div>
-                          <p className="text-[10px] font-mono text-gray-400">01:30 PM</p>
+                          <p className="text-[10px] font-mono font-bold text-[#00FFFF]">01:30 PM</p>
                        </div>
                     </div>
                  </div>
@@ -1321,20 +1940,11 @@ export default function App() {
         )}
       </main>
 
-      {/* Right Student Profile Panel */}
-      <aside className="w-[400px] border-l border-brand-border flex flex-col overflow-y-auto no-scrollbar shrink-0">
-         <div className="p-8 space-y-8">
-            {/* Header / Avatar Section with Futuristic Background */}
-            <div className="relative p-6 rounded-2xl overflow-hidden saas-card border-none bg-transparent">
-               <div 
-                  className="absolute inset-0 z-0 opacity-30"
-                  style={{ 
-                    backgroundImage: 'url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2672&auto=format&fit=crop")',
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center'
-                  }}
-               />
-               <div className="absolute inset-0 bg-gradient-to-t from-brand-card via-brand-card/80 to-transparent z-0" />
+      {/* Right Student Profile Panel - HUD Flat Sci-Fi Panel */}
+      <aside className="w-[380px] bg-transparent border-l border-white/10 flex flex-col overflow-y-auto no-scrollbar shrink-0 select-none">
+         <div className="p-6 space-y-6">
+            {/* Header / Avatar Section with Hexagon HUD Styling */}
+            <div className="relative p-6 border border-white/10 bg-[#070a10] rounded-none">
                <div className="relative z-10 flex flex-col items-center text-center">
                   <input 
                     type="file" 
@@ -1343,113 +1953,183 @@ export default function App() {
                     accept="image/*" 
                     onChange={handleFileUpload} 
                   />
+                  
+                  {/* Hexagon Avatar */}
                   <motion.div 
                     whileHover={{ scale: 1.05 }}
                     transition={{ type: "spring", stiffness: 400, damping: 17 }}
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-24 h-24 rounded-full bg-brand-card border-4 border-brand-bg flex items-center justify-center p-1.5 shadow-2xl mb-4 relative group cursor-pointer overflow-hidden"
+                    className="hexagon-wrapper cursor-pointer mb-2.5 group"
+                    title="Click to calibrate biometric photo"
                   >
-                    <div className="absolute inset-0 bg-brand-purple/20 rounded-full blur-xl group-hover:bg-brand-purple/40 group-hover:shadow-[0_0_30px_rgba(124,58,237,0.4)] transition-all" />
-                    
-                    {student?.photoURL ? (
-                      <img 
-                        src={student.photoURL} 
-                        alt={student.name} 
-                        className="w-full h-full object-cover rounded-full relative z-10" 
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-brand-purple/10 rounded-full flex items-center justify-center text-brand-purple font-bold text-4xl border border-brand-purple/20 relative z-10">
-                        {student?.name?.charAt(0)}
+                    <div className="hexagon-outer">
+                      <div className="hexagon-inner">
+                        {student?.photoURL ? (
+                          <img 
+                            src={student.photoURL} 
+                            alt={student.name} 
+                            className="w-full h-full object-cover relative z-10" 
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-black flex items-center justify-center text-[#CCFF00] font-mono font-bold text-3xl relative z-10 glitch-text-wrapper select-none">
+                            <span className="glitch-text" data-text={student?.name?.charAt(0) || 'B'}>
+                              {student?.name?.charAt(0) || 'B'}
+                            </span>
+                          </div>
+                        )}
+                        
+                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                          <Camera size={18} className="text-[#CCFF00]" />
+                        </div>
+                        
+                        {isUploading && (
+                          <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-30">
+                            <div className="w-5 h-5 border-2 border-[#CCFF00] border-t-transparent rounded-none animate-spin" />
+                          </div>
+                        )}
                       </div>
-                    )}
-                    
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                      <Camera size={24} className="text-white" />
                     </div>
-                    
-                    {isUploading && (
-                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-30">
-                        <div className="w-6 h-6 border-2 border-brand-purple border-t-transparent rounded-full animate-spin" />
-                      </div>
-                    )}
                   </motion.div>
-                  <h3 className="text-2xl font-bold text-white mb-1 tracking-tight">{student?.name}</h3>
+
+                  {/* Biometric locked status text */}
+                  <div className="mb-2">
+                    <span className="text-[9px] font-mono font-bold text-[#00FFFF] uppercase tracking-widest px-2 py-0.5 bg-[#00FFFF]/10 border border-[#00FFFF]/30">
+                      ID: {student?.mssv || '25010001'} // BIOMETRIC_LOCKED
+                    </span>
+                  </div>
+
+                  <h3 className="text-xl font-extrabold font-['Space_Grotesk'] text-white mb-1 tracking-tight">{student?.name}</h3>
                   <div className="flex items-center gap-2 justify-center">
                     {!isOnline ? (
-                      <div className="flex items-center gap-2 px-2 py-0.5 bg-red-500/10 border border-red-500/20 rounded-full">
-                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                        <span className="text-[9px] font-bold text-red-400 uppercase tracking-widest">Offline</span>
+                      <div className="flex items-center gap-2 px-2 py-0.5 bg-red-500/10 border border-red-500/20 rounded-none">
+                        <span className="w-1.5 h-1.5 rounded-none bg-red-500 animate-pulse" />
+                        <span className="text-[9px] font-mono font-bold text-red-400 uppercase tracking-widest">OFFLINE</span>
                       </div>
                     ) : (
-                      <span className="w-2 h-2 rounded-full bg-brand-emerald animate-pulse" />
+                      <span className="w-1.5 h-1.5 rounded-none bg-[#CCFF00] animate-pulse shadow-[0_0_6px_#CCFF00]" />
                     )}
-                    <span className="text-xs font-bold text-gray-500 uppercase tracking-[0.2em]">
+                    <span className="text-[10px] font-mono font-bold text-[#00FFFF] uppercase tracking-widest">
                       {isEditing ? editedStudent?.mssv : student?.mssv}
                     </span>
                   </div>
                </div>
             </div>
 
-            {/* Main Stats Card */}
+            {/* Main Stats Card with strictly font-mono sub-labels */}
             <div className="grid grid-cols-2 gap-3">
-               <div className="p-4 saas-card bg-white/[0.01]">
-                  <div className="flex items-center gap-2 text-brand-cyan mb-2">
-                    <TrendingUp size={14} />
-                    <span className="text-[10px] font-bold uppercase">Current GPA</span>
+               <div className="p-4 bg-[#070a10] border border-white/10 rounded-none">
+                  <div className="flex items-center gap-2 text-[#00FFFF] mb-1">
+                    <TrendingUp size={13} />
+                    <span className="text-[9px] font-mono font-bold uppercase tracking-wider">CURRENT GPA</span>
                   </div>
-                  <div className="text-2xl font-bold text-white">3.45</div>
+                  <div className="text-2xl font-mono font-extrabold text-white">{student?.gpa !== undefined ? student.gpa.toFixed(2) : '3.56'}</div>
                </div>
-               <div className="p-4 saas-card bg-white/[0.01]">
-                  <div className="flex items-center gap-2 text-brand-purple mb-2">
-                    <CheckCheck size={14} />
-                    <span className="text-[10px] font-bold uppercase">Credits</span>
+               <div className="p-4 bg-[#070a10] border border-white/10 rounded-none">
+                  <div className="flex items-center gap-2 text-[#CCFF00] mb-1">
+                    <CheckCheck size={13} />
+                    <span className="text-[9px] font-mono font-bold uppercase tracking-wider">CREDITS</span>
                   </div>
-                  <div className="text-2xl font-bold text-white">102/120</div>
+                  <div className="text-2xl font-mono font-extrabold text-white">{student?.credits ?? 42}/120</div>
                </div>
             </div>
 
-            {/* Line Chart Visual */}
-            <div className="space-y-4 gpa-performance-chart">
+            {/* Oscilloscope / Radar GPA Performance Visual */}
+            <div className="space-y-3 gpa-performance-chart">
               <div className="flex items-center justify-between">
-                <h4 className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">GPA Performance</h4>
-                <div className="flex items-center gap-4 text-[10px] font-semibold text-brand-emerald">
-                  <span>+0.25 vs Last Term</span>
+                <h4 className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 bg-[#CCFF00] rounded-none shadow-[0_0_6px_#CCFF00] animate-ping" />
+                  OSCILLOSCOPE // GPA RADAR
+                </h4>
+                <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold text-[#00FFFF]">
+                  <span>+0.25 vs PREV</span>
                 </div>
               </div>
-              <div className="h-48 saas-card bg-white/[0.01] p-4 flex items-center justify-center">
-                 <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={SMUT_DATA.gpaHistory}>
-                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ffffff05" />
-                       <XAxis dataKey="semester" hide />
-                       <YAxis hide domain={[3.0, 3.6]} />
-                       <Tooltip 
-                         contentStyle={{ 
-                           backgroundColor: 'var(--brand-card)', 
-                           border: '1px solid var(--brand-border)', 
-                           borderRadius: '8px',
-                           color: 'var(--brand-text-primary)',
-                           fontSize: '11px',
-                           fontWeight: 'bold'
-                         }}
-                         itemStyle={{ color: 'var(--brand-cyan)' }}
-                         labelStyle={{ display: 'none' }}
-                       />
-                       <Line type="monotone" dataKey="gpa" stroke="#06B6D4" strokeWidth={3} dot={{ fill: '#06B6D4', r: 4 }} activeDot={{ r: 6 }} />
-                    </LineChart>
-                 </ResponsiveContainer>
+              <div className="h-44 bg-[#070a10] border border-white/10 rounded-none p-3 flex flex-col justify-between relative overflow-hidden">
+                 {/* Radar / Oscilloscope concentric circles & grid */}
+                 <div 
+                   className="absolute inset-0 pointer-events-none opacity-35"
+                   style={{
+                     backgroundImage: `
+                       radial-gradient(circle at center, transparent 28%, rgba(0, 255, 255, 0.15) 29%, transparent 30%),
+                       radial-gradient(circle at center, transparent 58%, rgba(0, 255, 255, 0.12) 59%, transparent 60%),
+                       linear-gradient(to right, rgba(0, 255, 255, 0.08) 1px, transparent 1px),
+                       linear-gradient(to bottom, rgba(0, 255, 255, 0.08) 1px, transparent 1px)
+                     `,
+                     backgroundSize: '100% 100%, 100% 100%, 16px 16px, 16px 16px'
+                   }}
+                 />
+                 
+                 {/* Oscilloscope sweep beam */}
+                 <div className="oscilloscope-beam" />
+
+                 <div className="absolute top-1 left-2 text-[8px] font-mono text-[#00FFFF]/70 tracking-widest pointer-events-none select-none flex items-center gap-1">
+                   <span>SIG_CH1: WAVE_GPA</span>
+                   <span className="text-slate-600">//</span>
+                   <span className="text-[#CCFF00]">3.45 NORM</span>
+                 </div>
+
+                 <div className="w-full h-32 pt-2">
+                   <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={SMUT_DATA.gpaHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                         <CartesianGrid strokeDasharray="2 2" vertical={true} horizontal={true} stroke="rgba(0,255,255,0.14)" />
+                         <XAxis 
+                           dataKey="semester" 
+                           stroke="rgba(0, 255, 255, 0.3)" 
+                           tick={{ fill: 'rgba(0, 255, 255, 0.6)', fontSize: 8, fontFamily: 'monospace' }} 
+                           axisLine={{ stroke: 'rgba(0, 255, 255, 0.3)' }}
+                           tickLine={{ stroke: 'rgba(0, 255, 255, 0.3)' }}
+                         />
+                         <YAxis 
+                           domain={[3.0, 3.6]} 
+                           stroke="rgba(0, 255, 255, 0.3)" 
+                           tick={{ fill: 'rgba(0, 255, 255, 0.6)', fontSize: 8, fontFamily: 'monospace' }} 
+                           axisLine={{ stroke: 'rgba(0, 255, 255, 0.3)' }}
+                           tickLine={{ stroke: 'rgba(0, 255, 255, 0.3)' }}
+                           width={24}
+                         />
+                         <Tooltip 
+                           contentStyle={{ 
+                             backgroundColor: '#070a10', 
+                             border: '1px solid rgba(0,255,255,0.4)', 
+                             borderRadius: '0px',
+                             color: '#ffffff',
+                             fontSize: '10px',
+                             fontFamily: 'monospace',
+                             fontWeight: 'bold'
+                           }}
+                           itemStyle={{ color: '#CCFF00' }}
+                           labelStyle={{ display: 'none' }}
+                         />
+                         <Line 
+                           type="monotone" 
+                           dataKey="gpa" 
+                           stroke="#CCFF00" 
+                           strokeWidth={2} 
+                           dot={<DiamondDot />} 
+                           activeDot={{ r: 6, fill: '#00FFFF' }} 
+                         />
+                      </LineChart>
+                   </ResponsiveContainer>
+                 </div>
+
+                 {/* Text running at bottom */}
+                 <div className="flex items-center justify-between pt-1 border-t border-white/5 relative z-10">
+                   <span className="text-[8px] font-mono text-slate-500 uppercase tracking-wider">SIG_MODE: OSC-RADAR</span>
+                   <span className="text-[9px] font-mono font-bold text-[#CCFF00] tracking-widest animate-pulse">SYS_TICK: 2026.Q1</span>
+                 </div>
               </div>
             </div>
 
             {/* Profile Fields List */}
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                 <h4 className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Personal Info</h4>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                 <h4 className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">METADATA DOSSIER</h4>
                   <div className="flex items-center gap-3">
                     {!isEditing && (
                       <button 
                         onClick={handleExportCSV}
-                        className="text-[10px] font-bold text-brand-cyan hover:underline flex items-center gap-1"
+                        className="text-[9px] font-mono font-bold text-[#00FFFF] hover:underline flex items-center gap-1 uppercase"
                       >
                         <Download size={10} /> Export CSV
                       </button>
@@ -1463,13 +2143,13 @@ export default function App() {
                           setIsEditing(true);
                         }
                       }} 
-                      className="text-[10px] font-bold text-brand-purple hover:underline"
+                      className="text-[9px] font-mono font-bold text-[#CCFF00] hover:underline uppercase"
                     >
-                      {isEditing ? 'Save Changes' : 'Edit'}
+                      {isEditing ? '[Save Changes]' : '[Edit Profile]'}
                     </button>
                   </div>
               </div>
-              <div className="space-y-4 px-1">
+              <div className="space-y-3 px-1">
                  <ProfileItem icon={BookOpen} label="Major" value={student?.major} />
                  <ProfileItem 
                     icon={QrCode} 
@@ -1506,22 +2186,22 @@ export default function App() {
               </div>
             </div>
 
-            <div className="pt-4 border-t border-brand-border">
+            <div className="pt-4 border-t border-white/10">
                <CalendarWidget events={calendarEvents} />
             </div>
 
             {/* Digital Pass / QR */}
-            <div className="pt-4 border-t border-brand-border">
-               <div className="p-6 saas-card bg-gradient-to-br from-brand-purple/10 to-transparent flex flex-col items-center">
-                  <div className="p-3 bg-white rounded-xl mb-4 shadow-xl">
+            <div className="pt-4 border-t border-white/10">
+               <div className="p-5 bg-[#070a10] border border-white/10 rounded-none flex flex-col items-center">
+                  <div className="p-3 bg-white rounded-none mb-3 shadow-xl">
                     <QRCodeSVG 
                       value={`STUDENT_IDENTITY_${student?.mssv}`}
-                      size={100}
+                      size={90}
                       level="H"
                     />
                   </div>
-                  <p className="text-[10px] font-bold text-white uppercase tracking-widest">Digital Student Card</p>
-                  <p className="text-[9px] text-gray-500 mt-1">Valid 2024-2028</p>
+                  <p className="text-[10px] font-mono font-bold text-white uppercase tracking-widest">DIGITAL STUDENT PASS</p>
+                  <p className="text-[9px] font-mono text-slate-500 mt-0.5">VALID: 2024 - 2028 // VERIFIED</p>
                </div>
             </div>
          </div>
@@ -1535,27 +2215,27 @@ export default function App() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowSaveConfirm(false)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
             />
             <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="w-full max-w-sm saas-card bg-brand-card p-6 shadow-2xl relative z-10 border-white/10"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-sm saas-card bg-[#070a10] p-6 shadow-2xl relative z-10 border border-white/20 rounded-none"
             >
-              <div className="w-12 h-12 bg-brand-purple/10 rounded-xl flex items-center justify-center text-brand-purple mb-4">
-                <ShieldCheck size={24} />
+              <div className="w-10 h-10 bg-[#CCFF00]/10 border border-[#CCFF00]/30 rounded-none flex items-center justify-center text-[#CCFF00] mb-4">
+                <ShieldCheck size={20} />
               </div>
-              <h3 className="text-lg font-bold text-white mb-2 tracking-tight">Confirm Profile Updates</h3>
-              <p className="text-xs text-gray-500 leading-relaxed mb-6">
-                Are you sure you want to apply these changes? Your updated contact information will be synced with the university databases.
+              <h3 className="text-base font-bold font-['Space_Grotesk'] text-white mb-2 uppercase tracking-wide">Xác nhận cập nhật hồ sơ</h3>
+              <p className="text-xs font-['Plus_Jakarta_Sans'] text-slate-400 leading-relaxed mb-6">
+                Bạn có chắc chắn muốn lưu các thay đổi này? Thông tin liên lạc mới sẽ được đồng bộ hoá ngay lập tức với cơ sở dữ liệu học vụ.
               </p>
               <div className="flex gap-3">
                 <button 
                   onClick={() => setShowSaveConfirm(false)}
                   className="flex-1 saas-button-secondary py-2 text-xs"
                 >
-                  Cancel
+                  HỦY BỎ
                 </button>
                 <button 
                   onClick={() => {
@@ -1564,7 +2244,7 @@ export default function App() {
                   }}
                   className="flex-1 saas-button-primary py-2 text-xs"
                 >
-                  Apply Changes
+                  LƯU THAY ĐỔI
                 </button>
               </div>
             </motion.div>
@@ -1576,17 +2256,53 @@ export default function App() {
       <GpaCalculatorModal 
         isOpen={isGpaModalOpen} 
         onClose={() => setIsGpaModalOpen(false)} 
+        currentCgpa={student?.gpa ?? 3.56}
+        currentCredits={student?.credits ?? 42}
       />
       
+      <NotificationsModal
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
+        notifications={notifications}
+        studentId={student?.mssv || '25010001'}
+      />
+
       <AppIntro 
         isOpen={isIntroOpen} 
         onClose={() => setIsIntroOpen(false)} 
+        studentName={student?.name}
+        onStartTour={() => setIsTourActive(true)}
+      />
+
+      <AppOutro
+        isOpen={isOutroOpen}
+        onClose={() => setIsOutroOpen(false)}
+        onConfirmLogout={handleLogout}
+        studentName={student?.name}
+        studentMssv={student?.mssv}
+        major={student?.major}
       />
 
       <InteractiveTour 
         isActive={isTourActive} 
         onClose={() => setIsTourActive(false)} 
       />
+
+      <PrivacyNoticeModal
+        isOpen={isPrivacyOpen}
+        onAccept={() => {
+          localStorage.setItem('smut_privacy_consent', 'true');
+          setIsPrivacyOpen(false);
+          const hasSeen = localStorage.getItem('hasSeenIntro') === 'true' || localStorage.getItem('smut_onboarding_done') === 'true';
+          if (!hasSeen) {
+            setIsIntroOpen(true);
+          }
+        }}
+        onClose={() => setIsPrivacyOpen(false)}
+        canDismiss={false}
+      />
+
+      <CyberToastContainer />
     </div>
   );
 }
