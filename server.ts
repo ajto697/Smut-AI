@@ -435,4 +435,9 @@ async function startServer() {
   });
 }
 
-startServer();
+// Only listen on port if not running in a Serverless environment (like Vercel)
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
