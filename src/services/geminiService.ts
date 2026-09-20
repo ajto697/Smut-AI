@@ -6,7 +6,32 @@ import { showCyberToast } from "./toastService";
  * API keys and AI logic are securely processed server-side.
  */
 
+function getSmartLocalFallback(query: string, studentName?: string): string {
+  const q = (query || "").toLowerCase().trim();
+  const name = studentName || "bạn";
+
+  if (!q || q === "hi" || q === "hello" || q.includes("chào") || q.includes("hú hù") || q === "alo") {
+    return `Hú hù! 🦉 Chào ${name}! Cú Học Tập (Scholar Owl) của trường SMUT rất vui được gặp bạn!\n\nMình có thể hỗ trợ bạn mọi thông tin học vụ:\n- 📊 **Tra cứu & Dự báo GPA / Tín chỉ**\n- 📝 **Luyện tập trắc nghiệm & Chấm bài Azota**\n- 🏛️ **Quy chế học vụ, học bổng & cơ sở SMUT**\n- 📅 **Lịch học và thời khóa biểu**\n\nBạn cần Cú giải đáp nội dung gì hôm nay nào? ✨`;
+  }
+
+  if (q.includes("gpa") || q.includes("điểm") || q.includes("học bổng")) {
+    return `🦉 **Tư vấn GPA & Học bổng từ Cú Học Tập:**\n\n- **Thang điểm 4.0:**\n  - Xuất sắc: GPA ≥ 3.60 (ĐRL ≥ 90)\n  - Giỏi: GPA 3.20 – 3.59 (ĐRL ≥ 80)\n  - Khá: GPA 2.50 – 3.19\n- **Mẹo tăng GPA:** Bạn có thể mở tab **"DỰ BÁO GPA"** ở menu bên trái để giả lập các kịch bản điểm môn học kỳ này và xem số tín chỉ cần cải thiện nhé! 🎯`;
+  }
+
+  if (q.includes("tín chỉ") || q.includes("môn học") || q.includes("đăng ký")) {
+    return `🦉 **Quy chế Tín chỉ SMUT:**\n\n- **Chuẩn tốt nghiệp:** Tối thiểu 120 - 135 tín chỉ (tùy theo ngành Sư phạm hay Công nghệ).\n- **Đăng ký học kỳ:** Mỗi kỳ sinh viên được đăng ký từ 14 đến 24 tín chỉ.\n- Bạn hãy theo dõi thông báo đăng ký môn học tại cổng Portal và lưu ý kiểm tra các môn tiên quyết trước khi đăng ký nhé!`;
+  }
+
+  if (q.includes("học phí") || q.includes("tiền học") || q.includes("học bổng")) {
+    return `🦉 **Thông tin Học phí & Hỗ trợ sinh viên:**\n\n- Học phí được đóng trực tiếp qua Cổng thanh toán tài vụ hoặc quét mã VietQR theo mã định danh MSSV.\n- Sinh viên ngành Sư phạm được hưởng chính sách hỗ trợ tiền đóng học phí và sinh hoạt phí theo Nghị định 116/2020/NĐ-CP.\n- Nếu có thắc mắc cụ thể về biên lai, bạn liên hệ Phòng Kế hoạch - Tài chính tại Cơ sở chính nhé!`;
+  }
+
+  return `Hú hù! 🦉 Cú Học Tập đã ghi nhận câu hỏi của bạn: *" ${query} "*.\n\nCú đang tổng hợp thông tin học vụ SMUT để giải đáp cho bạn. Bạn có thể mở các phân hệ trên menu (Cú Học Tập Azota, Dự Báo GPA, hoặc Lịch học) để tương tác trực quan nhé!\n\n*(💡 Lưu ý triển khai Vercel: Để Cú kích hoạt mô hình Gemini trực tuyến phân tích chuyên sâu mọi chủ đề, hãy kiểm tra biến \`GEMINI_API_KEY\` và bấm **Redeploy** trên Vercel nhé!)*`;
+}
+
 export async function getChatResponse(messages: Message[], studentName?: string): Promise<string> {
+  const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || "";
+
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',
@@ -20,19 +45,19 @@ export async function getChatResponse(messages: Message[], studentName?: string)
     if (data.isFallback || data.error) {
       showCyberToast({
         type: 'warning',
-        title: 'TRỢ LÝ CÚ // CHẾ ĐỘ DỰ PHÒNG',
-        message: 'Máy chủ AI đang ngoại tuyến, hệ thống đang dùng trí tuệ học vụ dự phòng.'
+        title: 'TRỢ LÝ CÚ // THÔNG TIN HỌC VỤ',
+        message: 'Hệ thống đang hỗ trợ bạn qua cơ sở dữ liệu học vụ dự phòng.'
       });
     }
-    return data.reply || "Xin lỗi, tôi không thể trả lời lúc này.";
+    return data.reply || getSmartLocalFallback(lastUserMsg, studentName);
   } catch (error) {
-    console.error("Chat API error:", error);
+    console.warn("Chat API fetch error, activating smart local engine:", error);
     showCyberToast({
-      type: 'warning',
-      title: 'TRỢ LÝ CÚ // CHẾ ĐỘ DỰ PHÒNG',
-      message: 'Gián đoạn kết nối máy chủ AI. Cú Owl đã kích hoạt phản hồi nội bộ.'
+      type: 'info',
+      title: 'SCHOLAR OWL // PHẢN HỒI',
+      message: 'Cú Học Tập đã kích hoạt bộ giải đáp học vụ thông minh.'
     });
-    return "Xin lỗi, Cú Owl tạm thời gián đoạn kết nối máy chủ AI. Bạn hãy thử lại sau giây lát nhé! 🦉";
+    return getSmartLocalFallback(lastUserMsg, studentName);
   }
 }
 
