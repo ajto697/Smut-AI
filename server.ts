@@ -10,7 +10,7 @@ import {
   normalizeChatContents,
   truncateText,
   verifyAiConnection
-} from "./api/_lib/gemini";
+} from "./api/_lib/gemini.js";
 
 dotenv.config();
 

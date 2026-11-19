@@ -1,12 +1,13 @@
-import { generateAIContent, isAiConfigured, setCorsHeaders } from "./_lib/gemini";
+import { generateAIContent, isAiConfigured, setCorsHeaders } from "./_lib/gemini.js";
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req, res) {
   setCorsHeaders(res);
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
-  const { type = "login", userName, major, role } = req.body || {};
+  const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+  const { type = "login", userName, major, role } = body;
   const studentMajor = major || "Công nghệ Giáo dục";
   const studentRole = role || "Sinh viên K25";
 

@@ -1,6 +1,6 @@
-import { AiServiceError, generateAIContent, setCorsHeaders } from "./_lib/gemini";
+import { AiServiceError, generateAIContent, setCorsHeaders } from "./_lib/gemini.js";
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req, res) {
   setCorsHeaders(res);
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -10,7 +10,8 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { kpiCode, description, evidenceFileName, evidenceDescription, studentName } = req.body || {};
+    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+    const { kpiCode, description, evidenceFileName, evidenceDescription, studentName } = body;
     const studentContext = studentName ? `Sinh viên: ${studentName}. ` : "";
     const prompt = `Bạn là Trợ lý Cú Học Tập "Scholar Owl" - Trưởng ban Đánh giá rèn luyện tự động.
 Bạn cần thẩm định minh chứng cho hạng mục kiểm tra sau:
@@ -37,7 +38,7 @@ Yêu cầu: Viết ngắn gọn tầm 3-5 câu, giàu xúc cảm sư phạm, t�
     });
 
     return res.status(200).json({ assessment: response.text });
-  } catch (err: any) {
+  } catch (err) {
     const status = err instanceof AiServiceError ? err.statusCode : 500;
     const code = err instanceof AiServiceError ? err.errorCode : "AI_KPI_ERROR";
     console.error("Vercel /api/appraise-kpi error:", code, err?.message || err);

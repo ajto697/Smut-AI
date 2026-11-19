@@ -1,6 +1,6 @@
-import { AiServiceError, Type, generateAIContent, setCorsHeaders, truncateText } from "./_lib/gemini";
+import { AiServiceError, Type, generateAIContent, setCorsHeaders, truncateText } from "./_lib/gemini.js";
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req, res) {
   setCorsHeaders(res);
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -10,7 +10,8 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { docText = "", filename = "Tài liệu học tập", studentName } = req.body || {};
+    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+    const { docText = "", filename = "Tài liệu học tập", studentName } = body;
     if (!docText.toString().trim()) {
       return res.status(400).json({
         error: true,
@@ -73,7 +74,7 @@ Hãy trả về dữ liệu JSON chuẩn xác tuyệt đối bám sát tài li�
       .trim();
     const result = JSON.parse(cleanedText);
     return res.status(200).json(result);
-  } catch (err: any) {
+  } catch (err) {
     const status = err instanceof AiServiceError ? err.statusCode : 500;
     const code = err instanceof AiServiceError ? err.errorCode : "AI_ANALYZE_ERROR";
     console.error("Vercel /api/analyze-doc error:", code, err?.message || err);

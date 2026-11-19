@@ -1,6 +1,6 @@
-import { AiServiceError, Type, generateAIContent, setCorsHeaders, truncateText } from "./_lib/gemini";
+import { AiServiceError, Type, generateAIContent, setCorsHeaders, truncateText } from "./_lib/gemini.js";
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req, res) {
   setCorsHeaders(res);
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -10,7 +10,8 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { docText = "", count = 3 } = req.body || {};
+    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+    const { docText = "", count = 3 } = body;
     if (!docText.toString().trim()) {
       return res.status(400).json({
         error: true,
@@ -74,7 +75,7 @@ Yêu cầu BẮT BUỘC:
     }
     const questions = parsed.slice(0, safeCount);
     return res.status(200).json(questions);
-  } catch (err: any) {
+  } catch (err) {
     const status = err instanceof AiServiceError ? err.statusCode : 500;
     const code = err instanceof AiServiceError ? err.errorCode : "AI_QUIZ_ERROR";
     console.error("Vercel /api/generate-quiz error:", code, err?.message || err);

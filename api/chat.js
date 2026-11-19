@@ -4,9 +4,9 @@ import {
   generateAIContent,
   normalizeChatContents,
   setCorsHeaders
-} from "./_lib/gemini";
+} from "./_lib/gemini.js";
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req, res) {
   setCorsHeaders(res);
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -16,7 +16,8 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { messages = [], studentName } = req.body || {};
+    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+    const { messages = [], studentName } = body;
     const contents = normalizeChatContents(messages);
     if (contents.length === 0) {
       return res.status(400).json({
@@ -35,7 +36,7 @@ export default async function handler(req: any, res: any) {
     });
 
     return res.status(200).json({ reply: response.text });
-  } catch (err: any) {
+  } catch (err) {
     const status = err instanceof AiServiceError ? err.statusCode : 500;
     const code = err instanceof AiServiceError ? err.errorCode : "AI_CHAT_ERROR";
     console.error("Vercel /api/chat error:", code, err?.message || err);

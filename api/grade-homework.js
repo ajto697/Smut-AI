@@ -1,6 +1,6 @@
-import { AiServiceError, generateAIContent, setCorsHeaders, truncateText } from "./_lib/gemini";
+import { AiServiceError, generateAIContent, setCorsHeaders, truncateText } from "./_lib/gemini.js";
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req, res) {
   setCorsHeaders(res);
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -10,7 +10,8 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { homeworkText = "", assignmentTitle = "Bài tập học vụ", studentName } = req.body || {};
+    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+    const { homeworkText = "", assignmentTitle = "Bài tập học vụ", studentName } = body;
     if (!homeworkText.toString().trim()) {
       return res.status(400).json({
         error: true,
@@ -44,13 +45,14 @@ Hãy đóng vai giảng viên & trợ lý học thuật "Scholar Owl" chấm đi
     const response = await generateAIContent({
       contents: prompt,
       config: {
-        systemInstruction: studentContext + "Bạn là Cú Trợ Lý Học Tập (Scholar Owl) chuyên chấm bài tự luận theo rubric rõ ràng và khách quan."
+        systemInstruction:
+          studentContext + "Bạn là Cú Trợ Lý Học Tập (Scholar Owl) chuyên chấm bài tự luận theo rubric rõ ràng và khách quan."
       },
       timeoutMs: 20000
     });
 
     return res.status(200).json({ feedback: response.text });
-  } catch (err: any) {
+  } catch (err) {
     const status = err instanceof AiServiceError ? err.statusCode : 500;
     const code = err instanceof AiServiceError ? err.errorCode : "AI_GRADE_ERROR";
     console.error("Vercel /api/grade-homework error:", code, err?.message || err);

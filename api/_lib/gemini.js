@@ -87,24 +87,13 @@ export const MODEL_CANDIDATES = Array.from(
   new Set([PRIMARY_MODEL, "gemini-3.1-flash-lite"])
 );
 
-let verifiedWorkingModel: string | null = null;
-
-interface CachedHealth {
-  available: boolean;
-  model: string | null;
-  reason?: string;
-  checkedAt: number;
-}
-
-let cachedHealth: CachedHealth | null = null;
+let verifiedWorkingModel = null;
+let cachedHealth = null;
 const HEALTH_OK_TTL_MS = 60_000;
 const HEALTH_ERR_TTL_MS = 15_000;
 
 export class AiServiceError extends Error {
-  statusCode: number;
-  errorCode: string;
-
-  constructor(message: string, statusCode = 500, errorCode = "AI_UPSTREAM_ERROR") {
+  constructor(message, statusCode = 500, errorCode = "AI_UPSTREAM_ERROR") {
     super(message);
     this.name = "AiServiceError";
     this.statusCode = statusCode;
@@ -112,16 +101,16 @@ export class AiServiceError extends Error {
   }
 }
 
-export function getApiKey(): string {
+export function getApiKey() {
   return (process.env.GEMINI_API_KEY || "").trim();
 }
 
-export function isAiConfigured(): boolean {
+export function isAiConfigured() {
   const key = getApiKey();
   return key.length > 0 && key !== "MY_GEMINI_API_KEY";
 }
 
-export function getAiStatus(): { available: boolean; model?: string | null; reason?: string } {
+export function getAiStatus() {
   if (!isAiConfigured()) {
     return {
       available: false,
@@ -132,9 +121,7 @@ export function getAiStatus(): { available: boolean; model?: string | null; reas
   return { available: true, model: verifiedWorkingModel || PRIMARY_MODEL };
 }
 
-export async function verifyAiConnection(
-  forceRefresh = false
-): Promise<{ available: boolean; model: string | null; reason?: string }> {
+export async function verifyAiConnection(forceRefresh = false) {
   if (!isAiConfigured()) {
     cachedHealth = null;
     verifiedWorkingModel = null;
@@ -171,7 +158,7 @@ export async function verifyAiConnection(
       available: true,
       model: cachedHealth.model
     };
-  } catch (err: any) {
+  } catch (err) {
     const reason = err?.message || "Không thể xác thực kết nối tới Gemini API.";
     cachedHealth = {
       available: false,
@@ -187,7 +174,7 @@ export async function verifyAiConnection(
   }
 }
 
-export function createGeminiClient(): GoogleGenAI {
+export function createGeminiClient() {
   const apiKey = getApiKey();
   if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
     throw new AiServiceError(
@@ -211,16 +198,14 @@ export function createGeminiClient(): GoogleGenAI {
  * Gemini requires conversation history to start with a 'user' turn
  * and strictly alternate between 'user' and 'model' roles with non-empty text.
  */
-export function normalizeChatContents(
-  messages: Array<{ role?: string; content?: string }>
-): Array<{ role: "user" | "model"; parts: Array<{ text: string }> }> {
+export function normalizeChatContents(messages) {
   if (!Array.isArray(messages)) return [];
 
-  const mapped: Array<{ role: "user" | "model"; text: string }> = [];
+  const mapped = [];
   for (const m of messages) {
     const text = (m?.content || "").toString().trim();
     if (!text) continue;
-    const role: "user" | "model" = m?.role === "user" ? "user" : "model";
+    const role = m?.role === "user" ? "user" : "model";
     if (mapped.length === 0 && role === "model") {
       // Drop leading assistant greeting so contents starts with 'user'
       continue;
@@ -239,13 +224,9 @@ export function normalizeChatContents(
   }));
 }
 
-export async function generateAIContent(params: {
-  contents: any;
-  config?: any;
-  timeoutMs?: number;
-}) {
+export async function generateAIContent(params) {
   const ai = createGeminiClient();
-  let lastError: any = null;
+  let lastError = null;
   const timeoutLimit = params.timeoutMs || 18000;
 
   const candidates = verifiedWorkingModel
@@ -266,13 +247,13 @@ export async function generateAIContent(params: {
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new AiServiceError(`Timeout after ${timeoutLimit}ms`, 504, "AI_TIMEOUT")), timeoutLimit)
       );
-      const result = (await Promise.race([callPromise, timeoutPromise])) as any;
+      const result = await Promise.race([callPromise, timeoutPromise]);
       if (result && typeof result.text === "string" && result.text.trim().length > 0) {
         verifiedWorkingModel = model;
         return Object.assign(result, { model });
       }
       throw new AiServiceError("Mô hình AI trả về phản hồi rỗng.", 502, "EMPTY_RESPONSE");
-    } catch (err: any) {
+    } catch (err) {
       lastError = err;
       if (verifiedWorkingModel === model) {
         verifiedWorkingModel = null;
@@ -297,10 +278,14 @@ export async function generateAIContent(params: {
 
   const upstreamStatus = Number(lastError?.status || lastError?.statusCode) || 502;
   const upstreamMsg = lastError?.message || "Không thể kết nối tới dịch vụ Gemini AI.";
-  throw new AiServiceError(upstreamMsg, upstreamStatus >= 400 && upstreamStatus < 600 ? upstreamStatus : 502, "AI_UPSTREAM_ERROR");
+  throw new AiServiceError(
+    upstreamMsg,
+    upstreamStatus >= 400 && upstreamStatus < 600 ? upstreamStatus : 502,
+    "AI_UPSTREAM_ERROR"
+  );
 }
 
-export function truncateText(text: string, maxChars: number = 30000): string {
+export function truncateText(text, maxChars = 30000) {
   if (!text) return "";
   if (text.length <= maxChars) return text;
   return (
@@ -309,7 +294,7 @@ export function truncateText(text: string, maxChars: number = 30000): string {
   );
 }
 
-export function setCorsHeaders(res: any) {
+export function setCorsHeaders(res) {
   res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
