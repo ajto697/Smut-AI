@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
 
 export { Type };
 
@@ -80,11 +80,25 @@ QUY TẮC AN TOÀN & BẢO VỆ DỮ LIỆU:
 7. Chống bịa đặt (Anti-Hallucination): Không bịa thông tin ngoài dữ liệu. Nếu không chắc chắn, hướng dẫn sinh viên liên hệ hotline Phòng Đào tạo: 028-1234-5678.
 8. Ghi chú miễn trừ (AI Disclaimer): Luôn giữ vai trò tham mưu học vụ số; các quyết định tài chính, đình chỉ, tốt nghiệp cần văn bản phê duyệt chính thức từ Ban Giám hiệu.`;
 
-// Active @google/genai models per platform specification
-export const MODEL_CANDIDATES = [
-  "gemini-4-hydrogen",
-  "gemini-3.1-flash-lite"
-];
+export const PRIMARY_MODEL = (process.env.GEMINI_MODEL || "gemini-3.1-flash-lite").trim();
+
+// Verified active Google Gemini API model ID (plus optional GEMINI_MODEL env override)
+export const MODEL_CANDIDATES = Array.from(
+  new Set([PRIMARY_MODEL, "gemini-3.1-flash-lite"])
+);
+
+let verifiedWorkingModel: string | null = null;
+
+interface CachedHealth {
+  available: boolean;
+  model: string | null;
+  reason?: string;
+  checkedAt: number;
+}
+
+let cachedHealth: CachedHealth | null = null;
+const HEALTH_OK_TTL_MS = 60_000;
+const HEALTH_ERR_TTL_MS = 15_000;
 
 export class AiServiceError extends Error {
   statusCode: number;
@@ -107,14 +121,70 @@ export function isAiConfigured(): boolean {
   return key.length > 0 && key !== "MY_GEMINI_API_KEY";
 }
 
-export function getAiStatus(): { available: boolean; reason?: string } {
+export function getAiStatus(): { available: boolean; model?: string | null; reason?: string } {
   if (!isAiConfigured()) {
     return {
       available: false,
+      model: null,
       reason: "Biến môi trường GEMINI_API_KEY chưa được cấu hình trên máy chủ."
     };
   }
-  return { available: true };
+  return { available: true, model: verifiedWorkingModel || PRIMARY_MODEL };
+}
+
+export async function verifyAiConnection(
+  forceRefresh = false
+): Promise<{ available: boolean; model: string | null; reason?: string }> {
+  if (!isAiConfigured()) {
+    cachedHealth = null;
+    verifiedWorkingModel = null;
+    return {
+      available: false,
+      model: null,
+      reason: "Biến môi trường GEMINI_API_KEY chưa được cấu hình trên máy chủ."
+    };
+  }
+
+  const now = Date.now();
+  if (!forceRefresh && cachedHealth) {
+    const ttl = cachedHealth.available ? HEALTH_OK_TTL_MS : HEALTH_ERR_TTL_MS;
+    if (now - cachedHealth.checkedAt < ttl) {
+      return {
+        available: cachedHealth.available,
+        model: cachedHealth.model,
+        reason: cachedHealth.reason
+      };
+    }
+  }
+
+  try {
+    const res = await generateAIContent({
+      contents: "Reply with OK.",
+      timeoutMs: 8000
+    });
+    cachedHealth = {
+      available: true,
+      model: res.model || verifiedWorkingModel || PRIMARY_MODEL,
+      checkedAt: now
+    };
+    return {
+      available: true,
+      model: cachedHealth.model
+    };
+  } catch (err: any) {
+    const reason = err?.message || "Không thể xác thực kết nối tới Gemini API.";
+    cachedHealth = {
+      available: false,
+      model: null,
+      reason,
+      checkedAt: now
+    };
+    return {
+      available: false,
+      model: null,
+      reason
+    };
+  }
 }
 
 export function createGeminiClient(): GoogleGenAI {
@@ -176,28 +246,40 @@ export async function generateAIContent(params: {
 }) {
   const ai = createGeminiClient();
   let lastError: any = null;
-  const timeoutLimit = params.timeoutMs || 15000;
+  const timeoutLimit = params.timeoutMs || 18000;
 
-  for (const model of MODEL_CANDIDATES) {
+  const candidates = verifiedWorkingModel
+    ? [verifiedWorkingModel, ...MODEL_CANDIDATES.filter((m) => m !== verifiedWorkingModel)]
+    : MODEL_CANDIDATES;
+
+  for (const model of candidates) {
     try {
+      const mergedConfig = { ...(params.config || {}) };
+      if (!mergedConfig.thinkingConfig && (model.startsWith("gemini-3.8") || model.startsWith("gemini-4"))) {
+        mergedConfig.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
+      }
       const callPromise = ai.models.generateContent({
         model,
         contents: params.contents,
-        config: params.config
+        config: mergedConfig
       });
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new AiServiceError(`Timeout after ${timeoutLimit}ms`, 504, "AI_TIMEOUT")), timeoutLimit)
       );
       const result = (await Promise.race([callPromise, timeoutPromise])) as any;
       if (result && typeof result.text === "string" && result.text.trim().length > 0) {
-        return result;
+        verifiedWorkingModel = model;
+        return Object.assign(result, { model });
       }
       throw new AiServiceError("Mô hình AI trả về phản hồi rỗng.", 502, "EMPTY_RESPONSE");
     } catch (err: any) {
       lastError = err;
+      if (verifiedWorkingModel === model) {
+        verifiedWorkingModel = null;
+      }
       const status = err?.status || err?.statusCode || err?.code;
       const msg = (err?.message || "").toLowerCase();
-      // If API key is invalid or permission denied, do not retry other models unnecessarily
+      // If API key is invalid or permission denied, do not retry other models
       if (status === 401 || status === 403 || msg.includes("api_key_invalid") || msg.includes("api key not valid")) {
         throw new AiServiceError(
           "Khóa GEMINI_API_KEY không hợp lệ hoặc bị từ chối quyền truy cập.",

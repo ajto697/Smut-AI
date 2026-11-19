@@ -21,26 +21,29 @@ export default async function handler(req: any, res: any) {
 
     const safeCount = Math.min(15, Math.max(1, Number(count) || 3));
     const truncated = truncateText(docText.toString());
-    const prompt = `Phát sinh ${safeCount} câu hỏi trắc nghiệm khách quan bằng tiếng Việt dựa TRỰC TIẾP trên tài liệu dưới đây:
+    const prompt = `Phát sinh CHÍNH XÁC ĐÚNG ${safeCount} câu hỏi trắc nghiệm khách quan bằng tiếng Việt dựa 100% TRỰC TIẾP trên nội dung Bài viết dưới đây (không bịa đặt hay lấy kiến thức ngoài chủ đề bài viết).
 Bài viết:
 "${truncated}"
 
-Yêu cầu định dạng JSON phản hồi:
-Trả về danh sách các câu hỏi, mỗi câu hỏi có cấu trúc:
-- id: Mã định danh câu hỏi duy nhất (e.g. "gq1", "gq2", "gq3"...)
-- question: Câu hỏi trắc nghiệm chi tiết, sâu sắc, kiểm tra khả năng nắm bắt kiến thức trong văn bản.
-- options: Mảng đúng 4 chuỗi chứa phương án trả lời.
-- correctIndex: Chỉ số nguyên từ 0 tới 3 chỉ phương án đúng.
-- explanation: Giải thích cặn kẽ vì sao phương án đó đúng và liên hệ với lý thuyết trong đoạn văn tương ứng.`;
+Yêu cầu BẮT BUỘC:
+- Mảng JSON kết quả PHẢI có đúng ${safeCount} phần tử (không ít hơn, không nhiều hơn).
+- Mỗi câu hỏi có cấu trúc:
+  - id: Mã định danh câu hỏi duy nhất ("gq1", "gq2", ..., "gq${safeCount}")
+  - question: Câu hỏi trắc nghiệm kiểm tra đúng kiến thức trong đoạn văn trên.
+  - options: Mảng đúng 4 chuỗi phương án trả lời.
+  - correctIndex: Chỉ số nguyên từ 0 tới 3 chỉ phương án đúng.
+  - explanation: Giải thích chi tiết dựa theo nội dung đoạn văn.`;
 
     const response = await generateAIContent({
       contents: prompt,
       config: {
         systemInstruction:
-          "Bạn là hệ thống tạo đề thi tự động thông minh. Bạn chỉ trả về dữ liệu có cấu trúc JSON chính xác.",
+          `Bạn là hệ thống tạo đề thi tự động chính xác. Bạn chỉ trả về JSON mảng gồm ĐÚNG ${safeCount} câu hỏi bám sát tài liệu được cung cấp.`,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
+          minItems: safeCount,
+          maxItems: safeCount,
           items: {
             type: Type.OBJECT,
             properties: {
@@ -65,7 +68,11 @@ Trả về danh sách các câu hỏi, mỗi câu hỏi có cấu trúc:
       .replace(/^```json\s*/i, "")
       .replace(/```$/i, "")
       .trim();
-    const questions = JSON.parse(cleanedText);
+    const parsed = JSON.parse(cleanedText);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      throw new AiServiceError("AI không trả về danh sách câu hỏi hợp lệ.", 502, "INVALID_QUIZ_FORMAT");
+    }
+    const questions = parsed.slice(0, safeCount);
     return res.status(200).json(questions);
   } catch (err: any) {
     const status = err instanceof AiServiceError ? err.statusCode : 500;

@@ -380,10 +380,11 @@ const ProfileItem = ({ icon: Icon, label, value, isEditing, onChange, name, link
   </div>
 );
 
-const QuickPrompt = ({ text, onClick }: any) => (
+const QuickPrompt = ({ text, onClick, disabled }: any) => (
   <button 
     onClick={onClick}
-    className="px-3 py-2 bg-white/[0.03] border border-white/10 rounded-none text-xs font-mono font-medium text-slate-300 hover:text-[#CCFF00] hover:border-[#CCFF00]/50 hover:bg-white/[0.07] transition-all flex items-center gap-2"
+    disabled={disabled}
+    className="px-3 py-2 bg-white/[0.03] border border-white/10 rounded-none text-xs font-mono font-medium text-slate-300 hover:text-[#CCFF00] hover:border-[#CCFF00]/50 hover:bg-white/[0.07] transition-all flex items-center gap-2 disabled:opacity-35 disabled:cursor-not-allowed"
   >
     <Stars size={12} className="text-[#CCFF00]" />
     {text}
@@ -688,10 +689,10 @@ export default function App() {
   
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const refreshAiHealth = async () => {
+  const refreshAiHealth = async (forceRefresh: boolean = false) => {
     setIsCheckingAi(true);
     try {
-      const status = await checkAiHealth();
+      const status = await checkAiHealth(forceRefresh);
       setAiHealth(status);
     } finally {
       setIsCheckingAi(false);
@@ -1192,6 +1193,14 @@ export default function App() {
   const handleSend = async (text: string = input) => {
     const messageText = text.trim();
     if (!messageText || isLoading) return;
+    if (aiHealth && !aiHealth.available) {
+      showCyberToast({
+        type: 'warning',
+        title: 'CÚ OWL AI // CHƯA SẴN SÀNG',
+        message: aiHealth.reason || 'Máy chủ chưa được cấu hình GEMINI_API_KEY hoặc không thể kết nối tới Gemini API.'
+      });
+      return;
+    }
 
     const userMsg: Message = { id: Date.now().toString(), role: 'user', content: messageText, timestamp: Date.now() };
     const nextMessages = [...messages, userMsg];
@@ -1709,7 +1718,7 @@ export default function App() {
                        </div>
                      </div>
                      <button
-                       onClick={refreshAiHealth}
+                       onClick={() => refreshAiHealth(true)}
                        disabled={isCheckingAi}
                        className="px-2.5 py-1 border border-amber-400/50 text-amber-300 hover:bg-amber-400/10 text-[10px] uppercase shrink-0"
                      >
@@ -1728,10 +1737,10 @@ export default function App() {
                         <p className="text-xs font-mono text-slate-400 max-w-md mx-auto mb-10 leading-relaxed">Hệ thống kết nối dữ liệu học vụ &amp; Cú Owl AI. Nhập câu hỏi hoặc chọn gợi ý nhanh bên dưới.</p>
                         
                         <div className="flex flex-wrap justify-center gap-2">
-                          <QuickPrompt text="Lịch thi & Bảo lưu" onClick={() => handleSend("Cho mình hỏi thủ tục bảo lưu và lịch thi học kỳ tới?")} />
-                          <QuickPrompt text="Phân tích & Dự báo GPA" onClick={() => handleSend("Phân tích điểm GPA hiện tại và gợi ý cách nâng điểm học kỳ tới")} />
-                          <QuickPrompt text="Đường đến Cơ sở 1" onClick={() => handleSend("Chỉ đường đến Cơ sở 1 và Phòng Đào tạo ở đâu?")} />
-                          <QuickPrompt text="Học phí & Tài chính" onClick={() => handleSend("Liên hệ Phòng Tài chính và thủ tục đóng học phí như thế nào?")} />
+                          <QuickPrompt disabled={aiHealth !== null && !aiHealth.available} text="Lịch thi & Bảo lưu" onClick={() => handleSend("Cho mình hỏi thủ tục bảo lưu và lịch thi học kỳ tới?")} />
+                          <QuickPrompt disabled={aiHealth !== null && !aiHealth.available} text="Phân tích & Dự báo GPA" onClick={() => handleSend("Phân tích điểm GPA hiện tại và gợi ý cách nâng điểm học kỳ tới")} />
+                          <QuickPrompt disabled={aiHealth !== null && !aiHealth.available} text="Đường đến Cơ sở 1" onClick={() => handleSend("Chỉ đường đến Cơ sở 1 và Phòng Đào tạo ở đâu?")} />
+                          <QuickPrompt disabled={aiHealth !== null && !aiHealth.available} text="Học phí & Tài chính" onClick={() => handleSend("Liên hệ Phòng Tài chính và thủ tục đóng học phí như thế nào?")} />
                         </div>
                       </div>
                    </div>
@@ -1788,18 +1797,23 @@ export default function App() {
                      <input 
                        type="text" 
                        value={input}
+                       disabled={aiHealth !== null && !aiHealth.available}
                        onFocus={() => setIsInputFocused(true)}
                        onBlur={() => setIsInputFocused(false)}
                        onChange={(e) => setInput(e.target.value)}
                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                       placeholder={placeholderText || "ENTER COMMAND OR QUERY..."} 
-                       className="w-full py-3.5 pl-1 pr-16 text-xs font-mono bg-transparent text-white placeholder:text-slate-500 rounded-none outline-none caret-[#CCFF00]"
+                       placeholder={
+                         aiHealth !== null && !aiHealth.available
+                           ? "CÚ OWL AI TẠM NGƯNG // VUI LÒNG CẤU HÌNH GEMINI_API_KEY..."
+                           : placeholderText || "ENTER COMMAND OR QUERY..."
+                       } 
+                       className="w-full py-3.5 pl-1 pr-16 text-xs font-mono bg-transparent text-white placeholder:text-slate-500 rounded-none outline-none caret-[#CCFF00] disabled:opacity-45 disabled:cursor-not-allowed"
                      />
 
                      {/* Enlarged Send button */}
                      <button 
                        onClick={() => handleSend()}
-                       disabled={!input.trim() || isLoading}
+                       disabled={!input.trim() || isLoading || (aiHealth !== null && !aiHealth.available)}
                        className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-black border-2 border-[#CCFF00] hover:bg-[#CCFF00] text-[#CCFF00] hover:text-black rounded-none transition-all duration-200 hover:shadow-[0_0_20px_#CCFF00] active:scale-95 disabled:opacity-20 disabled:pointer-events-none group/send"
                        title="Transmit Neural Command"
                      >
@@ -2107,7 +2121,7 @@ export default function App() {
                       </div>
                     </div>
                     <button
-                      onClick={refreshAiHealth}
+                      onClick={() => refreshAiHealth(true)}
                       disabled={isCheckingAi}
                       className="text-[10px] font-mono font-bold text-[#CCFF00] hover:underline flex items-center gap-1 uppercase"
                     >
@@ -2124,7 +2138,7 @@ export default function App() {
                     </div>
                     <p className="text-[11px] text-slate-300 leading-relaxed">
                       {aiHealth?.available
-                        ? 'Máy chủ API đã sẵn sàng phục vụ Trợ lý Cú AI, tạo đề Azota và chấm điểm tự luận.'
+                        ? `Máy chủ API đã sẵn sàng phục vụ Trợ lý Cú AI, tạo đề Azota và chấm điểm tự luận (Model: ${aiHealth.model || 'gemini-3.1-flash-lite'}).`
                         : aiHealth?.reason || 'Biến môi trường GEMINI_API_KEY chưa được thiết lập trên máy chủ Vercel / backend.'}
                     </p>
                   </div>

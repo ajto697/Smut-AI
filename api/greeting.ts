@@ -37,7 +37,7 @@ Hãy tạo 1 câu chào mừng ngắn gọn, truyền cảm hứng (dưới 35 c
 
     const response = await generateAIContent({
       contents: prompt,
-      timeoutMs: 5000
+      timeoutMs: 8000
     });
     const generated = response.text?.trim().replace(/^"(.*)"$/, "$1");
     return res.status(200).json({

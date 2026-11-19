@@ -8,6 +8,7 @@ import { showCyberToast } from "./toastService";
 
 export interface AiHealthStatus {
   available: boolean;
+  model?: string | null;
   reason?: string | null;
 }
 
@@ -23,23 +24,27 @@ export class AiApiError extends Error {
   }
 }
 
-export async function checkAiHealth(): Promise<AiHealthStatus> {
+export async function checkAiHealth(forceRefresh: boolean = false): Promise<AiHealthStatus> {
   try {
-    const res = await fetch("/api/health", { method: "GET" });
+    const url = forceRefresh ? "/api/health?refresh=1" : "/api/health";
+    const res = await fetch(url, { method: "GET" });
     if (!res.ok) {
       return {
         available: false,
+        model: null,
         reason: `Máy chủ API trả về mã lỗi HTTP ${res.status}.`
       };
     }
     const data = await res.json();
     return {
       available: Boolean(data.aiAvailable),
+      model: data.model || null,
       reason: data.aiStatusReason || null
     };
   } catch {
     return {
       available: false,
+      model: null,
       reason: "Không thể kết nối tới máy chủ backend (/api/health)."
     };
   }

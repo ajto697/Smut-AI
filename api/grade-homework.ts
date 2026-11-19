@@ -25,19 +25,26 @@ export default async function handler(req: any, res: any) {
 Nội dung bài làm:
 "${truncatedHomework}"
 
-Hãy đóng vai trợ lý cú học thuật "Scholar Owl" (Trợ lý Azota SMUT) cực kỳ tận tâm, thông minh và tràn đầy năng lượng.
-Hãy nhận xét, chấm điểm bài làm của sinh viên trên thang điểm 10 theo format sau:
-- Điểm số (thang 10, dạng số e.g. 8.5/10) và lời khen/nhận xét tổng quan.
-- Những điểm làm tốt.
-- Những điểm cần cải thiện, kèm gợi ý sửa đổi chi tiết.
-- Lời động viên học tập truyền cảm hứng đại diện cho Cú trợ lý học tập.
+Hãy đóng vai giảng viên & trợ lý học thuật "Scholar Owl" chấm điểm và nhận xét bài làm trên bằng tiếng Việt theo thang điểm 10 với định dạng Markdown rõ ràng sau:
+### 📊 Kết quả & Thang điểm Rubric
+- **Tổng điểm:** **X.X/10** (ghi điểm số cụ thể, ví dụ 8.0/10)
+- **Tiêu chí 1 - Nội dung & Lập luận (4.0 điểm):** [Chấm điểm chi tiết .../4.0 + nhận xét ngắn]
+- **Tiêu chí 2 - Bố cục & Tính mạch lạc (3.0 điểm):** [Chấm điểm chi tiết .../3.0 + nhận xét ngắn]
+- **Tiêu chí 3 - Ngôn ngữ & Thuật ngữ (3.0 điểm):** [Chấm điểm chi tiết .../3.0 + nhận xét ngắn]
 
-Trả lời bằng tiếng Việt, trình bày Markdown đẹp mắt với một vài emoji dễ thương biểu thị tính năng trợ lý học tập.`;
+### ✅ Những điểm làm tốt
+- ...
+
+### 🛠️ Điểm cần cải thiện & Gợi ý sửa chi tiết
+- ...
+
+### 🦉 Lời khuyên từ Scholar Owl
+- ...`;
 
     const response = await generateAIContent({
       contents: prompt,
       config: {
-        systemInstruction: studentContext + "Bạn là Cú Trợ Lý Học Tập (Scholar Owl) của trường SMUT."
+        systemInstruction: studentContext + "Bạn là Cú Trợ Lý Học Tập (Scholar Owl) chuyên chấm bài tự luận theo rubric rõ ràng và khách quan."
       },
       timeoutMs: 20000
     });

@@ -6,10 +6,10 @@ import {
   AiServiceError,
   Type,
   generateAIContent,
-  getAiStatus,
   isAiConfigured,
   normalizeChatContents,
-  truncateText
+  truncateText,
+  verifyAiConnection
 } from "./api/_lib/gemini";
 
 dotenv.config();
@@ -73,13 +73,15 @@ function sendAiError(res: express.Response, err: any, fallbackMessage: string, f
 // BACKEND API ROUTES
 // -------------------------------------------------------------
 
-// Health check endpoint (reports safe AI availability boolean without leaking secrets)
-app.get("/api/health", (_req, res) => {
-  const aiStatus = getAiStatus();
+// Health check endpoint (verifies live Gemini API connectivity without leaking secrets)
+app.get("/api/health", async (req, res) => {
+  const forceRefresh = req.query?.refresh === "1" || req.query?.refresh === "true";
+  const aiStatus = await verifyAiConnection(forceRefresh);
   res.json({
     status: "ok",
     service: "Scholar Owl Full-Stack Server",
     aiAvailable: aiStatus.available,
+    model: aiStatus.model || null,
     aiStatusReason: aiStatus.reason || null,
     timestamp: new Date().toISOString()
   });
@@ -131,19 +133,26 @@ const handleGradeHomework = async (req: express.Request, res: express.Response) 
 Nội dung bài làm:
 "${truncatedHomework}"
 
-Hãy đóng vai trợ lý cú học thuật "Scholar Owl" (Trợ lý Azota SMUT) cực kỳ tận tâm, thông minh và tràn đầy năng lượng.
-Hãy nhận xét, chấm điểm bài làm của sinh viên trên thang điểm 10 theo format sau:
-- Điểm số (thang 10, dạng số e.g. 8.5/10) và lời khen/nhận xét tổng quan.
-- Những điểm làm tốt.
-- Những điểm cần cải thiện, kèm gợi ý sửa đổi chi tiết.
-- Lời động viên học tập truyền cảm hứng đại diện cho Cú trợ lý học tập.
+Hãy đóng vai giảng viên & trợ lý học thuật "Scholar Owl" chấm điểm và nhận xét bài làm trên bằng tiếng Việt theo thang điểm 10 với định dạng Markdown rõ ràng sau:
+### 📊 Kết quả & Thang điểm Rubric
+- **Tổng điểm:** **X.X/10** (ghi điểm số cụ thể, ví dụ 8.0/10)
+- **Tiêu chí 1 - Nội dung & Lập luận (4.0 điểm):** [Chấm điểm chi tiết .../4.0 + nhận xét ngắn]
+- **Tiêu chí 2 - Bố cục & Tính mạch lạc (3.0 điểm):** [Chấm điểm chi tiết .../3.0 + nhận xét ngắn]
+- **Tiêu chí 3 - Ngôn ngữ & Thuật ngữ (3.0 điểm):** [Chấm điểm chi tiết .../3.0 + nhận xét ngắn]
 
-Trả lời bằng tiếng Việt, trình bày Markdown đẹp mắt với một vài emoji dễ thương biểu thị tính năng trợ lý học tập. Thể hiện sự ấm áp và quan tâm chăm sóc học viên.`;
+### ✅ Những điểm làm tốt
+- ...
+
+### 🛠️ Điểm cần cải thiện & Gợi ý sửa chi tiết
+- ...
+
+### 🦉 Lời khuyên từ Scholar Owl
+- ...`;
 
     const response = await generateAIContent({
       contents: prompt,
       config: {
-        systemInstruction: studentContext + "Bạn là Cú Trợ Lý Học Tập (Scholar Owl) của trường SMUT."
+        systemInstruction: studentContext + "Bạn là Cú Trợ Lý Học Tập (Scholar Owl) chuyên chấm bài tự luận theo rubric rõ ràng và khách quan."
       },
       timeoutMs: 20000
     });
@@ -241,25 +250,28 @@ const handleGenerateQuiz = async (req: express.Request, res: express.Response) =
   try {
     const safeCount = Math.min(15, Math.max(1, Number(count) || 3));
     const truncated = truncateText(docText.toString());
-    const prompt = `Phát sinh ${safeCount} câu hỏi trắc nghiệm khách quan bằng tiếng Việt dựa TRỰC TIẾP trên tài liệu dưới đây:
+    const prompt = `Phát sinh CHÍNH XÁC ĐÚNG ${safeCount} câu hỏi trắc nghiệm khách quan bằng tiếng Việt dựa 100% TRỰC TIẾP trên nội dung Bài viết dưới đây (không bịa đặt hay lấy kiến thức ngoài chủ đề bài viết).
 Bài viết:
 "${truncated}"
 
-Yêu cầu định dạng JSON phản hồi:
-Trả về danh sách các câu hỏi, mỗi câu hỏi có cấu trúc:
-- id: Mã định danh câu hỏi duy nhất (e.g. "gq1", "gq2", "gq3"...)
-- question: Câu hỏi trắc nghiệm chi tiết, sâu sắc, kiểm tra khả năng nắm bắt kiến thức trong văn bản.
-- options: Mảng 4 chuỗi chứa phương án trả lời.
-- correctIndex: Chỉ số nguyên từ 0 tới 3 chỉ phương án đúng.
-- explanation: Giải thích cặn kẽ vì sao phương án đó đúng và liên hệ với lý thuyết trong đoạn văn tương ứng.`;
+Yêu cầu BẮT BUỘC:
+- Mảng JSON kết quả PHẢI có đúng ${safeCount} phần tử (không ít hơn, không nhiều hơn).
+- Mỗi câu hỏi có cấu trúc:
+  - id: Mã định danh câu hỏi duy nhất ("gq1", "gq2", ..., "gq${safeCount}")
+  - question: Câu hỏi trắc nghiệm kiểm tra đúng kiến thức trong đoạn văn trên.
+  - options: Mảng đúng 4 chuỗi phương án trả lời.
+  - correctIndex: Chỉ số nguyên từ 0 tới 3 chỉ phương án đúng.
+  - explanation: Giải thích chi tiết dựa theo nội dung đoạn văn.`;
 
     const response = await generateAIContent({
       contents: prompt,
       config: {
-        systemInstruction: "Bạn là hệ thống tạo đề thi tự động thông minh. Bạn chỉ trả về dữ liệu có cấu trúc JSON chính xác.",
+        systemInstruction: `Bạn là hệ thống tạo đề thi tự động chính xác. Bạn chỉ trả về JSON mảng gồm ĐÚNG ${safeCount} câu hỏi bám sát tài liệu được cung cấp.`,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
+          minItems: safeCount,
+          maxItems: safeCount,
           items: {
             type: Type.OBJECT,
             properties: {
@@ -281,8 +293,11 @@ Trả về danh sách các câu hỏi, mỗi câu hỏi có cấu trúc:
 
     const text = response.text || "[]";
     const cleanedText = text.trim().replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
-    const questions = JSON.parse(cleanedText);
-    res.json(questions);
+    const parsed = JSON.parse(cleanedText);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      throw new AiServiceError("AI không trả về danh sách câu hỏi hợp lệ.", 502, "INVALID_QUIZ_FORMAT");
+    }
+    res.json(parsed.slice(0, safeCount));
   } catch (error: any) {
     console.error("Server /api/generate-quiz error:", error?.message || error);
     sendAiError(res, error, "Không thể tạo đề thi từ tài liệu lúc này.", "AI_QUIZ_ERROR");
@@ -361,7 +376,7 @@ Hãy tạo 1 câu chào mừng ngắn gọn, truyền cảm hứng (dưới 35 c
 
     const response = await generateAIContent({
       contents: prompt,
-      timeoutMs: 5000
+      timeoutMs: 8000
     });
     const generated = response.text?.trim().replace(/^"(.*)"$/, "$1");
     res.json({

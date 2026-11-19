@@ -360,11 +360,12 @@ export const StudyOwlAzota: React.FC<{ studentName?: string; studentId?: string 
   const [isCheckingAi, setIsCheckingAi] = useState<boolean>(false);
   const [docError, setDocError] = useState<string | null>(null);
   const [hwError, setHwError] = useState<string | null>(null);
+  const [kpiError, setKpiError] = useState<string | null>(null);
 
-  const refreshAiHealth = async () => {
+  const refreshAiHealth = async (forceRefresh: boolean = false) => {
     setIsCheckingAi(true);
     try {
-      const status = await checkAiHealth();
+      const status = await checkAiHealth(forceRefresh);
       setAiAvailable(status.available);
       setAiStatusReason(status.reason || null);
     } finally {
@@ -509,10 +510,11 @@ export const StudyOwlAzota: React.FC<{ studentName?: string; studentId?: string 
   };
 
   const handleVerifyKpi = async () => {
-    if (!selectedKpi) return;
+    if (!selectedKpi || !aiAvailable) return;
     if (!evidenceFileNameInput.trim() || !evidenceTextDesc.trim()) return;
 
     setIsVerifyingKpi(true);
+    setKpiError(null);
     setKpiAnalysisFeedback(null);
     setOwlComment(`Cú sắp mở cuộc kiểm toán rèn luyện để thẩm định tài liệu "${evidenceFileNameInput}" phục vụ tiêu chuẩn ${selectedKpi.code} của bạn... 🦉🔍`);
 
@@ -560,24 +562,13 @@ export const StudyOwlAzota: React.FC<{ studentName?: string; studentId?: string 
       );
     } catch (e: any) {
       console.error(e);
+      const msg = e?.message || 'Không thể kết nối tới máy chủ Gemini AI để thẩm định minh chứng.';
+      setKpiError(msg);
       if (e instanceof AiApiError && (e.code === 'MISSING_API_KEY' || e.code === 'API_KEY_INVALID' || e.status === 503)) {
         setAiAvailable(false);
-        setAiStatusReason(e.message);
+        setAiStatusReason(msg);
       }
-      const pendingItem: SMUT_KPI_Item = {
-        ...selectedKpi,
-        status: 'pending',
-        evidenceFile: evidenceFileNameInput,
-        evidenceText: evidenceTextDesc,
-        evidenceImage: uploadedEvidencePreview || getMockImageByFilename(evidenceFileNameInput),
-        comment: `⏳ Dịch vụ AI thẩm định hiện đang tạm ngưng (${e?.message || 'Chưa kết nối Gemini AI'}). Minh chứng "${evidenceFileNameInput}" đã được lưu ở trạng thái CHỜ DUYỆT THỦ CÔNG.`
-      };
-      setKpis(prevKpis => prevKpis.map(item => (item.id === selectedKpi.id ? pendingItem : item)));
-      setSelectedKpi(pendingItem);
-      setKpiAnalysisFeedback(pendingItem.comment || null);
-      const activeStudentId = studentId || '25010001';
-      updateKpiInFirestore(activeStudentId, pendingItem).catch(() => {});
-      setOwlComment("Kết nối AI tạm gián đoạn. Minh chứng của bạn đã được lưu vào hàng chờ duyệt thủ công! 🦉⏳");
+      setOwlComment(`⚠️ Không thể thẩm định minh chứng KPI lúc này (${msg}). Vui lòng thử lại sau khi kết nối AI ổn định! 🦉`);
     } finally {
       setIsVerifyingKpi(false);
     }
@@ -1416,7 +1407,7 @@ export const StudyOwlAzota: React.FC<{ studentName?: string; studentId?: string 
                   </div>
                   <button
                     type="button"
-                    onClick={refreshAiHealth}
+                    onClick={() => refreshAiHealth(true)}
                     disabled={isCheckingAi}
                     className="shrink-0 px-3 py-1.5 bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/40 text-amber-200 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all flex items-center gap-1.5"
                   >
@@ -1942,7 +1933,7 @@ export const StudyOwlAzota: React.FC<{ studentName?: string; studentId?: string 
                   </div>
                   <button
                     type="button"
-                    onClick={refreshAiHealth}
+                    onClick={() => refreshAiHealth(true)}
                     disabled={isCheckingAi}
                     className="shrink-0 px-3 py-1.5 bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/40 text-amber-200 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all flex items-center gap-1.5"
                   >
@@ -2385,10 +2376,46 @@ export const StudyOwlAzota: React.FC<{ studentName?: string; studentId?: string 
                               />
                             </div>
 
+                            {!aiAvailable && (
+                              <div className="p-3 rounded-xl border border-amber-400/40 bg-amber-500/10 space-y-2">
+                                <div className="flex items-start gap-2">
+                                  <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                                  <div className="space-y-0.5">
+                                    <p className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">
+                                      Thẩm định KPI bằng AI chưa khả dụng
+                                    </p>
+                                    <p className="text-[10px] text-amber-100/80 leading-relaxed">
+                                      {aiStatusReason || 'Máy chủ chưa được cấu hình GEMINI_API_KEY hoặc không thể kết nối Gemini API.'}
+                                    </p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => refreshAiHealth(true)}
+                                  disabled={isCheckingAi}
+                                  className="px-2.5 py-1 bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/40 text-amber-200 text-[9px] font-bold uppercase tracking-wider rounded transition-all flex items-center gap-1"
+                                >
+                                  <RefreshCw size={10} className={isCheckingAi ? 'animate-spin' : ''} />
+                                  {isCheckingAi ? 'Đang kiểm tra...' : 'Thử kết nối lại'}
+                                </button>
+                              </div>
+                            )}
+
+                            {kpiError && aiAvailable && (
+                              <div className="p-3 rounded-xl border border-red-500/40 bg-red-500/10 flex items-start gap-2">
+                                <AlertTriangle size={14} className="text-red-400 shrink-0 mt-0.5" />
+                                <p className="text-[10px] text-red-200 leading-relaxed">
+                                  <strong className="font-bold text-red-300">Lỗi thẩm định KPI: </strong>
+                                  {kpiError}
+                                </p>
+                              </div>
+                            )}
+
                             <button
-                              disabled={isVerifyingKpi || !evidenceFileNameInput.trim() || !evidenceTextDesc.trim()}
+                              disabled={!aiAvailable || isVerifyingKpi || !evidenceFileNameInput.trim() || !evidenceTextDesc.trim()}
                               onClick={handleVerifyKpi}
-                              className="w-full py-2.5 bg-amber-400 text-black font-extrabold text-xs rounded-lg hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(251,191,36,0.25)] disabled:opacity-30 disabled:shadow-none"
+                              title={!aiAvailable ? 'Cần cấu hình GEMINI_API_KEY để sử dụng tính năng AI' : undefined}
+                              className="w-full py-2.5 bg-amber-400 text-black font-extrabold text-xs rounded-lg hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(251,191,36,0.25)] disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none"
                             >
                               {isVerifyingKpi ? (
                                 <>
