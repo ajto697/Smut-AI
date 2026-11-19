@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BookOpen, Award, CheckCircle, AlertTriangle, Clock, Play, FileText, Upload, Sparkles, Send, HelpCircle, Flame, ArrowRight, RefreshCw, X, Check, CheckSquare, Trash, Plus, Volume2, VolumeX } from 'lucide-react';
 import { QuizSubject, QuizQuestion, DocumentAnalysisResult } from '../types';
-import { gradeHomework, analyzeDocumentKeywords, generateQuizFromDocument, appraiseKpiEvidence } from '../services/geminiService';
+import { gradeHomework, analyzeDocumentKeywords, generateQuizFromDocument, appraiseKpiEvidence, checkAiHealth, AiApiError } from '../services/geminiService';
 import { subscribeToStudentKpis, updateKpiInFirestore, saveQuizResultToFirestore } from '../services/kpiService';
 
 const MOCK_QUIZZES: QuizSubject[] = [
@@ -354,10 +354,33 @@ export const StudyOwlAzota: React.FC<{ studentName?: string; studentId?: string 
   const [customCorrectIndex, setCustomCorrectIndex] = useState(0);
   const [customExplanation, setCustomExplanation] = useState('');
 
+  // AI Availability & Error States
+  const [aiAvailable, setAiAvailable] = useState<boolean>(true);
+  const [aiStatusReason, setAiStatusReason] = useState<string | null>(null);
+  const [isCheckingAi, setIsCheckingAi] = useState<boolean>(false);
+  const [docError, setDocError] = useState<string | null>(null);
+  const [hwError, setHwError] = useState<string | null>(null);
+
+  const refreshAiHealth = async () => {
+    setIsCheckingAi(true);
+    try {
+      const status = await checkAiHealth();
+      setAiAvailable(status.available);
+      setAiStatusReason(status.reason || null);
+    } finally {
+      setIsCheckingAi(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshAiHealth();
+  }, []);
+
   // Document AI States
   const [docFileName, setDocFileName] = useState<string>('');
   const [docContent, setDocContent] = useState<string>('');
   const [isProcessingDoc, setIsProcessingDoc] = useState(false);
+  const [docProcessingMode, setDocProcessingMode] = useState<'keywords' | 'quiz' | null>(null);
   const [docKeywordsResult, setDocKeywordsResult] = useState<DocumentAnalysisResult | null>(null);
   const [flippedCards, setFlippedCards] = useState<Record<number, boolean>>({});
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
@@ -535,9 +558,26 @@ export const StudyOwlAzota: React.FC<{ studentName?: string; studentId?: string 
         ? `Chúc mừng bạn! Minh chứng tiêu chí ${selectedKpi.code} đã chính thức được phê duyệt thành công! Cộng thêm ${selectedKpi.points} điểm rèn luyện! 🎉🦉`
         : `Lưu ý tí xíu nha! Minh chứng tiêu chí ${selectedKpi.code} cần bổ sung/chỉnh sửa bổ sung theo ý kiến của Cú rèn luyện bên dưới nhé!`
       );
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      setOwlComment("Úi, kết nối AI tạm gián đoạn. Không sao nha, Cú rèn luyện đã phê duyệt offline minh chứng này cho bạn rồi! 🦉✨");
+      if (e instanceof AiApiError && (e.code === 'MISSING_API_KEY' || e.code === 'API_KEY_INVALID' || e.status === 503)) {
+        setAiAvailable(false);
+        setAiStatusReason(e.message);
+      }
+      const pendingItem: SMUT_KPI_Item = {
+        ...selectedKpi,
+        status: 'pending',
+        evidenceFile: evidenceFileNameInput,
+        evidenceText: evidenceTextDesc,
+        evidenceImage: uploadedEvidencePreview || getMockImageByFilename(evidenceFileNameInput),
+        comment: `⏳ Dịch vụ AI thẩm định hiện đang tạm ngưng (${e?.message || 'Chưa kết nối Gemini AI'}). Minh chứng "${evidenceFileNameInput}" đã được lưu ở trạng thái CHỜ DUYỆT THỦ CÔNG.`
+      };
+      setKpis(prevKpis => prevKpis.map(item => (item.id === selectedKpi.id ? pendingItem : item)));
+      setSelectedKpi(pendingItem);
+      setKpiAnalysisFeedback(pendingItem.comment || null);
+      const activeStudentId = studentId || '25010001';
+      updateKpiInFirestore(activeStudentId, pendingItem).catch(() => {});
+      setOwlComment("Kết nối AI tạm gián đoạn. Minh chứng của bạn đã được lưu vào hàng chờ duyệt thủ công! 🦉⏳");
     } finally {
       setIsVerifyingKpi(false);
     }
@@ -653,38 +693,66 @@ export const StudyOwlAzota: React.FC<{ studentName?: string; studentId?: string 
   };
 
   const handleExtractKeywords = async () => {
-    if (!docContent.trim()) return;
+    if (!docContent.trim() || !aiAvailable) return;
     setIsProcessingDoc(true);
+    setDocProcessingMode('keywords');
+    setDocError(null);
     setDocKeywordsResult(null);
     setFlippedCards({});
     setOwlComment(`Cú đang tập trung nghiên cứu tài liệu để trích xuất và giải nghĩa các thuật ngữ trọng tâm cho bạn đây... 🧠📖`);
 
-    const result = await analyzeDocumentKeywords(docContent, docFileName || 'Tài liệu dán tay', studentName);
-    setDocKeywordsResult(result);
-    setIsProcessingDoc(false);
-    setOwlComment(`Tuyệt vời! Cú đã giải nghĩa sâu các từ khóa cốt lõi bên dưới dành riêng cho bạn rồi đó! 🎉`);
+    try {
+      const result = await analyzeDocumentKeywords(docContent, docFileName || 'Tài liệu dán tay', studentName);
+      setDocKeywordsResult(result);
+      setOwlComment(`Tuyệt vời! Cú đã giải nghĩa sâu các từ khóa cốt lõi bên dưới dành riêng cho bạn rồi đó! 🎉`);
+    } catch (err: any) {
+      const msg = err?.message || 'Không thể kết nối máy chủ AI để phân tích tài liệu.';
+      setDocError(msg);
+      if (err instanceof AiApiError && (err.code === 'MISSING_API_KEY' || err.code === 'API_KEY_INVALID' || err.status === 503)) {
+        setAiAvailable(false);
+        setAiStatusReason(msg);
+      }
+      setOwlComment(`⚠️ Rất tiếc, Cú chưa thể phân tích tài liệu lúc này (${msg}). 🦉`);
+    } finally {
+      setIsProcessingDoc(false);
+      setDocProcessingMode(null);
+    }
   };
 
   const handleGenerateQuiz = async () => {
-    if (!docContent.trim()) return;
+    if (!docContent.trim() || !aiAvailable) return;
     setIsProcessingDoc(true);
+    setDocProcessingMode('quiz');
+    setDocError(null);
     setDocQuizQuestions([]);
     setOwlComment(`Đang chuyển hóa tài liệu thành các câu hỏi trắc nghiệm chuẩn chỉnh Azota... Sắp xong rồi! 📝⚡`);
 
-    const questions = await generateQuizFromDocument(docContent, docFileName || 'Tài liệu dán tay', studentName, docQuizCount);
-    setDocQuizQuestions(questions);
-    
-    // Auto register this quiz into local question bank
-    const newSubject: QuizSubject = {
-      id: `custom-${Date.now()}`,
-      name: `Đề tự tạo: ${docFileName || 'Tài liệu tải lên'}`,
-      icon: '📝',
-      questions: questions
-    };
-    setQuizSubjects(prev => [newSubject, ...prev]);
+    try {
+      const questions = await generateQuizFromDocument(docContent, docFileName || 'Tài liệu dán tay', studentName, docQuizCount);
+      setDocQuizQuestions(questions);
 
-    setIsProcessingDoc(false);
-    setOwlComment(`Trời ơi, Cú đã biên soạn xong bộ đề trắc nghiệm ${questions.length} câu hoàn toàn mới! Nhần "Bắt đầu làm bài" để thử tài nhé! 🦉🎯`);
+      // Auto register this quiz into local question bank
+      const newSubject: QuizSubject = {
+        id: `custom-${Date.now()}`,
+        name: `Đề tự tạo: ${docFileName || 'Tài liệu tải lên'}`,
+        icon: '📝',
+        questions: questions
+      };
+      setQuizSubjects(prev => [newSubject, ...prev]);
+
+      setOwlComment(`Trời ơi, Cú đã biên soạn xong bộ đề trắc nghiệm ${questions.length} câu hoàn toàn mới! Nhấn "Bắt đầu giải đề" để thử tài nhé! 🦉🎯`);
+    } catch (err: any) {
+      const msg = err?.message || 'Không thể kết nối máy chủ AI để tạo đề trắc nghiệm.';
+      setDocError(msg);
+      if (err instanceof AiApiError && (err.code === 'MISSING_API_KEY' || err.code === 'API_KEY_INVALID' || err.status === 503)) {
+        setAiAvailable(false);
+        setAiStatusReason(msg);
+      }
+      setOwlComment(`⚠️ Không thể tạo đề thi tự động lúc này (${msg}). Bạn hãy thử lại hoặc dùng kho Luyện Đề Azota Mock nhé! 🦉`);
+    } finally {
+      setIsProcessingDoc(false);
+      setDocProcessingMode(null);
+    }
   };
 
   const handleStartDocQuiz = () => {
@@ -791,14 +859,26 @@ export const StudyOwlAzota: React.FC<{ studentName?: string; studentId?: string 
   };
 
   const handleGrading = async () => {
-    if (!homeworkText.trim()) return;
+    if (!homeworkText.trim() || !aiAvailable) return;
     setIsGrading(true);
+    setHwError(null);
     setGradeResult(null);
 
-    // Call the newly created service API
-    const response = await gradeHomework(homeworkText, assignmentTitle, studentName);
-    setGradeResult(response);
-    setIsGrading(false);
+    try {
+      const response = await gradeHomework(homeworkText, assignmentTitle, studentName);
+      setGradeResult(response);
+      setOwlComment("Tuyệt vời! Cú đã chấm điểm và viết nhận xét chi tiết cho bài làm của bạn bên dưới rồi nhé! 🦉✨");
+    } catch (err: any) {
+      const msg = err?.message || 'Không thể kết nối máy chủ AI để chấm bài.';
+      setHwError(msg);
+      if (err instanceof AiApiError && (err.code === 'MISSING_API_KEY' || err.code === 'API_KEY_INVALID' || err.status === 503)) {
+        setAiAvailable(false);
+        setAiStatusReason(msg);
+      }
+      setOwlComment(`⚠️ Không thể chấm điểm tự động lúc này (${msg}). 🦉`);
+    } finally {
+      setIsGrading(false);
+    }
   };
 
   const formatResult = (text: string) => {
@@ -1320,6 +1400,42 @@ export const StudyOwlAzota: React.FC<{ studentName?: string; studentId?: string 
                 />
               </div>
 
+              {/* AI Unavailable / Error Banner */}
+              {!aiAvailable && (
+                <div className="p-4 rounded-xl border border-amber-400/40 bg-amber-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-bold text-amber-300 uppercase tracking-wider">
+                        Tính năng AI tạm thời chưa khả dụng
+                      </p>
+                      <p className="text-[11px] text-amber-100/80 leading-relaxed">
+                        {aiStatusReason || 'Máy chủ chưa được cấu hình GEMINI_API_KEY hoặc không thể kết nối tới Gemini API.'} Các nút tạo đề và phân tích bằng AI đã được vô hiệu hóa; bạn vẫn có thể sử dụng tab Luyện Đề Azota Mock.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={refreshAiHealth}
+                    disabled={isCheckingAi}
+                    className="shrink-0 px-3 py-1.5 bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/40 text-amber-200 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all flex items-center gap-1.5"
+                  >
+                    <RefreshCw size={11} className={isCheckingAi ? 'animate-spin' : ''} />
+                    {isCheckingAi ? 'Đang kiểm tra...' : 'Thử kết nối lại'}
+                  </button>
+                </div>
+              )}
+
+              {docError && aiAvailable && (
+                <div className="p-3.5 rounded-xl border border-red-500/40 bg-red-500/10 flex items-start gap-2.5">
+                  <AlertTriangle size={15} className="text-red-400 shrink-0 mt-0.5" />
+                  <div className="text-xs text-red-200 leading-relaxed">
+                    <strong className="font-bold text-red-300">Lỗi xử lý tài liệu: </strong>
+                    {docError}
+                  </div>
+                </div>
+              )}
+
               {/* Choice of Count + Trigger Buttons */}
               <div className="flex flex-col sm:flex-row gap-3 items-center justify-between p-4 bg-white/[0.01] border border-brand-border rounded-xl">
                 <div className="flex items-center gap-2">
@@ -1327,7 +1443,8 @@ export const StudyOwlAzota: React.FC<{ studentName?: string; studentId?: string 
                   <select
                     value={docQuizCount}
                     onChange={(e) => setDocQuizCount(Number(e.target.value))}
-                    className="bg-brand-background border border-brand-border text-xs text-white rounded-lg p-1.5 focus:border-brand-emerald focus:outline-none font-bold cursor-pointer"
+                    disabled={!aiAvailable}
+                    className="bg-brand-background border border-brand-border text-xs text-white rounded-lg p-1.5 focus:border-brand-emerald focus:outline-none font-bold cursor-pointer disabled:opacity-40"
                   >
                     <option value={3}>3 Câu hỏi</option>
                     <option value={5}>5 Câu hỏi</option>
@@ -1338,10 +1455,11 @@ export const StudyOwlAzota: React.FC<{ studentName?: string; studentId?: string 
                 <div className="flex gap-2.5 w-full sm:w-auto">
                   <button
                     onClick={handleExtractKeywords}
-                    disabled={!docContent.trim() || isProcessingDoc}
-                    className="flex-1 sm:flex-none px-4 py-2 bg-brand-purple/25 border border-brand-purple/30 hover:bg-brand-purple text-white text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 disabled:opacity-30 cursor-pointer"
+                    disabled={!aiAvailable || !docContent.trim() || isProcessingDoc}
+                    title={!aiAvailable ? 'Cần cấu hình GEMINI_API_KEY để sử dụng tính năng AI' : undefined}
+                    className="flex-1 sm:flex-none px-4 py-2 bg-brand-purple/25 border border-brand-purple/30 hover:bg-brand-purple text-white text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                   >
-                    {isProcessingDoc && docKeywordsResult === null ? (
+                    {isProcessingDoc && docProcessingMode === 'keywords' ? (
                       <>
                         <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                         Đang phân tích...
@@ -1355,10 +1473,11 @@ export const StudyOwlAzota: React.FC<{ studentName?: string; studentId?: string 
 
                   <button
                     onClick={handleGenerateQuiz}
-                    disabled={!docContent.trim() || isProcessingDoc}
-                    className="flex-1 sm:flex-none px-4 py-2 bg-brand-emerald text-black hover:opacity-90 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 disabled:opacity-30 shadow-[0_4px_15px_rgba(16,185,129,0.25)] cursor-pointer"
+                    disabled={!aiAvailable || !docContent.trim() || isProcessingDoc}
+                    title={!aiAvailable ? 'Cần cấu hình GEMINI_API_KEY để sử dụng tính năng AI' : undefined}
+                    className="flex-1 sm:flex-none px-4 py-2 bg-brand-emerald text-black hover:opacity-90 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_4px_15px_rgba(16,185,129,0.25)] cursor-pointer"
                   >
-                    {isProcessingDoc && docQuizQuestions.length === 0 ? (
+                    {isProcessingDoc && docProcessingMode === 'quiz' ? (
                       <>
                         <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
                         Đang tạo đề...
@@ -1808,11 +1927,47 @@ export const StudyOwlAzota: React.FC<{ studentName?: string; studentId?: string 
                 />
               </div>
 
+              {!aiAvailable && (
+                <div className="p-4 rounded-xl border border-amber-400/40 bg-amber-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-bold text-amber-300 uppercase tracking-wider">
+                        Chấm điểm AI hiện chưa khả dụng
+                      </p>
+                      <p className="text-[11px] text-amber-100/80 leading-relaxed">
+                        {aiStatusReason || 'Máy chủ chưa được cấu hình GEMINI_API_KEY hoặc không thể kết nối tới Gemini API.'} Nút chấm điểm tự động tạm thời bị vô hiệu hóa để đảm bảo tính chính xác.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={refreshAiHealth}
+                    disabled={isCheckingAi}
+                    className="shrink-0 px-3 py-1.5 bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/40 text-amber-200 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all flex items-center gap-1.5"
+                  >
+                    <RefreshCw size={11} className={isCheckingAi ? 'animate-spin' : ''} />
+                    {isCheckingAi ? 'Đang kiểm tra...' : 'Thử kết nối lại'}
+                  </button>
+                </div>
+              )}
+
+              {hwError && aiAvailable && (
+                <div className="p-3.5 rounded-xl border border-red-500/40 bg-red-500/10 flex items-start gap-2.5">
+                  <AlertTriangle size={15} className="text-red-400 shrink-0 mt-0.5" />
+                  <div className="text-xs text-red-200 leading-relaxed">
+                    <strong className="font-bold text-red-300">Lỗi chấm bài AI: </strong>
+                    {hwError}
+                  </div>
+                </div>
+              )}
+
               <div className="flex justify-end">
                 <button
                   onClick={handleGrading}
-                  disabled={!homeworkText.trim() || isGrading}
-                  className="px-6 py-2.5 bg-brand-cyan text-black font-bold text-xs rounded-lg hover:opacity-90 transition-all flex items-center gap-1.5 shadow-[0_4px_12px_rgba(6,182,212,0.25)] disabled:opacity-30"
+                  disabled={!aiAvailable || !homeworkText.trim() || isGrading}
+                  title={!aiAvailable ? 'Cần cấu hình GEMINI_API_KEY để sử dụng tính năng AI' : undefined}
+                  className="px-6 py-2.5 bg-brand-cyan text-black font-bold text-xs rounded-lg hover:opacity-90 transition-all flex items-center gap-1.5 shadow-[0_4px_12px_rgba(6,182,212,0.25)] disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   {isGrading ? (
                     <>

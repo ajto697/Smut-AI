@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Send, MapPin, ClipboardList, FileText, CreditCard, School, Info, User, 
@@ -6,12 +6,13 @@ import {
   Save, X, Phone, Mail, BookOpen, Calendar, Bell, Clock, CheckCheck, 
   AlertCircle, Stars, QrCode, Search, MessageSquare, Library, BookText, 
   Settings, HelpCircle, Plus, GraduationCap, Rocket, Globe, Book, TrendingUp,
-  ExternalLink, Download, Camera, Sun, Moon, Calculator, Sparkles
+  ExternalLink, Download, Camera, Sun, Moon, Calculator, Sparkles,
+  History, Trash2, CheckCircle2, RefreshCw, Sliders, Award, BookMarked, FileCheck2
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Message, Student, Notification, CalendarEvent } from './types';
-import { getChatResponse, generateLoginGreeting, generateDashboardGreeting } from './services/geminiService';
+import { getChatResponse, generateLoginGreeting, generateDashboardGreeting, checkAiHealth, AiHealthStatus } from './services/geminiService';
 import { SMUT_DATA } from './constants';
 import { auth } from './firebase';
 import { signOut } from 'firebase/auth';
@@ -320,7 +321,7 @@ const NavButton = ({ num, icon: Icon, label, active, onClick, badge, className =
       <Icon size={15} className={`transition-colors duration-150 ${active ? 'text-[#CCFF00]' : 'text-slate-400 group-hover:text-[#CCFF00]'}`} />
       <span className={`font-mono text-xs font-bold tracking-wider transition-colors duration-150 ${active ? 'text-[#CCFF00]' : 'text-slate-300 group-hover:text-white'}`}>{label}</span>
     </div>
-    {badge && (
+    {typeof badge === 'number' && badge > 0 && (
       <span className="bg-[#CCFF00] text-black text-[9px] px-1.5 py-0.5 rounded-none font-mono font-bold shadow-[0_0_8px_rgba(204,255,0,0.4)]">
         {badge}
       </span>
@@ -389,31 +390,16 @@ const QuickPrompt = ({ text, onClick }: any) => (
   </button>
 );
 
-const CalendarWidget = ({ events }: { events: CalendarEvent[] }) => (
-  <div className="space-y-4">
-    <div className="flex items-center justify-between">
-       <h4 className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Academic Calendar</h4>
-       <Calendar size={14} className="text-brand-purple" />
-    </div>
-    <div className="space-y-3">
-       {events.length === 0 ? (
-         <div className="p-4 saas-card bg-white/[0.01] text-center">
-           <p className="text-[10px] text-gray-600">No upcoming events</p>
-         </div>
-       ) : (
-         events.slice(0, 4).map(event => (
-           <div key={event.id} className="p-3 saas-card bg-white/[0.01] border-l-2 hover:bg-white/[0.03] transition-colors" style={{ borderLeftColor: event.type === 'exam' ? 'var(--color-brand-purple)' : event.type === 'registration' ? 'var(--color-brand-cyan)' : 'var(--color-brand-emerald)' }}>
-              <div className="flex justify-between items-start mb-1">
-                <span className="text-[10px] font-bold text-white uppercase truncate pr-2">{event.title}</span>
-                <span className="text-[9px] font-mono text-gray-500 shrink-0">{new Date(event.date).toLocaleDateString()}</span>
-              </div>
-              <p className="text-[10px] text-gray-500 line-clamp-1">{event.description}</p>
-           </div>
-         ))
-       )}
-    </div>
-  </div>
-);
+const formatChatHtml = (text: string) => {
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return escaped
+    .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-bold">$1</strong>')
+    .replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 bg-white/10 text-[#CCFF00] font-mono text-[11px]">$1</code>')
+    .replace(/\n/g, '<br/>');
+};
 
 const MessageBubble: React.FC<{ message: Message; studentName: string }> = ({ message, studentName }) => {
   const isBot = message.role === 'assistant';
@@ -421,7 +407,7 @@ const MessageBubble: React.FC<{ message: Message; studentName: string }> = ({ me
   // Extract map tag if present
   const mapTagMatch = message.content.match(/\[MAP:(cs[12])\]/);
   const campusId = mapTagMatch ? mapTagMatch[1] : null;
-  const cleanContent = message.content.replace(/\[MAP:cs[12]\]/g, '');
+  const cleanContent = message.content.replace(/\[MAP:cs[12]\]/g, '').trim();
   const timeFormatted = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 
   return (
@@ -470,7 +456,7 @@ const MessageBubble: React.FC<{ message: Message; studentName: string }> = ({ me
 
         <div 
           className={`relative z-10 ${isBot ? 'text-left' : 'text-right'}`}
-          dangerouslySetInnerHTML={{ __html: cleanContent.replace(/\n/g, '<br/>') }} 
+          dangerouslySetInnerHTML={{ __html: formatChatHtml(cleanContent) }} 
         />
 
         {isBot && campusId && (
@@ -505,10 +491,38 @@ const MessageBubble: React.FC<{ message: Message; studentName: string }> = ({ me
   );
 };
 
+interface ChatSession {
+  id: string;
+  title: string;
+  updatedAt: number;
+  messages: Message[];
+}
+
+interface HudPreferences {
+  deadlineAlerts: boolean;
+  eventAlerts: boolean;
+  toastAlerts: boolean;
+  hudScanlines: boolean;
+}
+
+const DEFAULT_PREFERENCES: HudPreferences = {
+  deadlineAlerts: true,
+  eventAlerts: true,
+  toastAlerts: true,
+  hudScanlines: true
+};
+
+const REGISTRATION_CATALOG = [
+  { code: 'COMP301', name: 'Trí tuệ Nhân tạo & Máy học Ứng dụng', credits: 3, schedule: 'Thứ 2 (Tiết 1-3) · P.C302', slots: '48/60', status: 'Mở đăng ký' },
+  { code: 'EDUC204', name: 'Thiết kế Học liệu Số & Mô phỏng Tương tác', credits: 3, schedule: 'Thứ 4 (Tiết 4-6) · P.E501', slots: '52/60', status: 'Mở đăng ký' },
+  { code: 'MATH218', name: 'Xác suất Thống kê & Phân tích Dữ liệu', credits: 3, schedule: 'Thứ 6 (Tiết 1-3) · P.A201', slots: '39/60', status: 'Mở đăng ký' },
+  { code: 'SOFT310', name: 'Kiến trúc Phần mềm & Điện toán Đám mây', credits: 3, schedule: 'Thứ 5 (Tiết 7-9) · P.C404', slots: '60/60', status: 'Chờ mở thêm' }
+];
+
 // --- Main Application ---
 
 export default function App() {
-  const [view, setView] = useState<'overview' | 'chat' | 'academic' | 'study-owl'>('overview');
+  const [view, setView] = useState<'overview' | 'chat' | 'academic' | 'study-owl' | 'settings'>('overview');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isGpaModalOpen, setIsGpaModalOpen] = useState(false);
   const [isTourActive, setIsTourActive] = useState(false);
@@ -523,6 +537,21 @@ export default function App() {
   const [student, setStudent] = useState<Student | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [calendarFilter, setCalendarFilter] = useState<'upcoming' | 'full'>('upcoming');
+  const [selectedCalendarEvent, setSelectedCalendarEvent] = useState<CalendarEvent | null>(null);
+  const [activeQuickModal, setActiveQuickModal] = useState<'registration' | 'transcript' | 'certificates' | null>(null);
+  const [selectedRegCodes, setSelectedRegCodes] = useState<string[]>(['COMP301', 'EDUC204']);
+
+  const [aiHealth, setAiHealth] = useState<AiHealthStatus | null>(null);
+  const [isCheckingAi, setIsCheckingAi] = useState(false);
+  const [preferences, setPreferences] = useState<HudPreferences>(() => {
+    try {
+      const saved = localStorage.getItem('scholar_owl_prefs');
+      return saved ? { ...DEFAULT_PREFERENCES, ...JSON.parse(saved) } : DEFAULT_PREFERENCES;
+    } catch {
+      return DEFAULT_PREFERENCES;
+    }
+  });
 
   // Typewriter effect for command placeholder
   const TYPEWRITER_PHRASES = [
@@ -648,15 +677,40 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [messages, setMessages] = useState<Message[]>([]);
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string>(() => `session_${Date.now()}`);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [firestoreArchive, setFirestoreArchive] = useState<Message[]>([]);
+  const hasHydratedFirestoreChatRef = useRef(false);
+  const skipNextFirestoreAutoLoadRef = useRef(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  const refreshAiHealth = async () => {
+    setIsCheckingAi(true);
+    try {
+      const status = await checkAiHealth();
+      setAiHealth(status);
+    } finally {
+      setIsCheckingAi(false);
+    }
+  };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('scholar_owl_prefs', JSON.stringify(preferences));
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [preferences]);
+
   useEffect(() => {
     testConnection().catch(() => {});
     seedCalendarEvents().catch(() => {});
     seedDemoData().catch(() => {});
+    refreshAiHealth();
     
     const unsubscribeCalendar = subscribeToCalendarEvents(setCalendarEvents);
 
@@ -667,6 +721,7 @@ export default function App() {
         if (s) {
           setStudent(s);
           setIsLoggedIn(true);
+          seedNotifications(s.mssv).catch(() => {});
           showCyberToast({
             type: 'info',
             title: 'PHIÊN HỌC VỤ // KHÔI PHỤC',
@@ -679,13 +734,65 @@ export default function App() {
     return () => unsubscribeCalendar();
   }, []);
 
+  // Load saved chat sessions per student from localStorage
+  useEffect(() => {
+    if (!student) {
+      setChatSessions([]);
+      hasHydratedFirestoreChatRef.current = false;
+      skipNextFirestoreAutoLoadRef.current = false;
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(`scholar_owl_chat_sessions_${student.mssv}`);
+      const parsed: ChatSession[] = raw ? JSON.parse(raw) : [];
+      setChatSessions(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      setChatSessions([]);
+    }
+    hasHydratedFirestoreChatRef.current = false;
+    skipNextFirestoreAutoLoadRef.current = false;
+  }, [student?.mssv]);
+
+  // Persist current chat session whenever it has user turns
+  useEffect(() => {
+    if (!student) return;
+    const firstUserMsg = messages.find(m => m.role === 'user');
+    if (!firstUserMsg) return;
+
+    const title = firstUserMsg.content.trim().slice(0, 60) + (firstUserMsg.content.trim().length > 60 ? '…' : '');
+    const updatedSession: ChatSession = {
+      id: activeSessionId,
+      title,
+      updatedAt: messages[messages.length - 1]?.timestamp || Date.now(),
+      messages
+    };
+
+    setChatSessions(prev => {
+      const filtered = prev.filter(s => s.id !== activeSessionId);
+      const next = [updatedSession, ...filtered].slice(0, 25);
+      try {
+        localStorage.setItem(`scholar_owl_chat_sessions_${student.mssv}`, JSON.stringify(next));
+      } catch {
+        // Ignore storage errors
+      }
+      return next;
+    });
+  }, [messages, activeSessionId, student?.mssv]);
+
   useEffect(() => {
     if (student) {
       const unsubscribeNotifs = subscribeToNotifications(student.mssv, (notifs) => {
         setNotifications(notifs);
       });
       const unsubscribeChat = subscribeToStudentChat(student.mssv, (dbMessages) => {
-        if (dbMessages && dbMessages.length > 0) {
+        setFirestoreArchive(dbMessages || []);
+        if (
+          dbMessages &&
+          dbMessages.length > 0 &&
+          !hasHydratedFirestoreChatRef.current &&
+          !skipNextFirestoreAutoLoadRef.current
+        ) {
+          hasHydratedFirestoreChatRef.current = true;
           setMessages(dbMessages);
         }
       });
@@ -695,6 +802,31 @@ export default function App() {
       };
     }
   }, [student]);
+
+  const dedupedCalendarEvents = useMemo(() => {
+    const seen = new Map<string, CalendarEvent>();
+    for (const evt of calendarEvents) {
+      const key = `${(evt.title || '').trim().toLowerCase()}__${evt.date}`;
+      if (!seen.has(key)) {
+        seen.set(key, evt);
+      }
+    }
+    return Array.from(seen.values()).sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+  }, [calendarEvents]);
+
+  const displayedCalendarEvents = useMemo(() => {
+    if (calendarFilter === 'full') return dedupedCalendarEvents;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const upcoming = dedupedCalendarEvents.filter(evt => new Date(evt.date).getTime() >= now.getTime());
+    return (upcoming.length > 0 ? upcoming : dedupedCalendarEvents).slice(0, 4);
+  }, [dedupedCalendarEvents, calendarFilter]);
+
+  const unreadNotificationsCount = useMemo(() => {
+    return notifications.filter(n => !n.isRead).length;
+  }, [notifications]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -995,12 +1127,75 @@ export default function App() {
     }
   };
 
+  const handleNewChatSession = () => {
+    skipNextFirestoreAutoLoadRef.current = true;
+    const newId = `session_${Date.now()}`;
+    setActiveSessionId(newId);
+    setMessages([]);
+    showCyberToast({
+      type: 'info',
+      title: 'NEURAL TERMINAL // PHIÊN MỚI',
+      message: 'Đã khởi tạo phiên trò chuyện mới. Bạn có thể xem lại các phiên cũ trong HISTORY.'
+    });
+  };
+
+  const handleLoadChatSession = (session: ChatSession) => {
+    skipNextFirestoreAutoLoadRef.current = true;
+    setActiveSessionId(session.id);
+    setMessages(session.messages);
+    setIsHistoryOpen(false);
+    setView('chat');
+  };
+
+  const handleDeleteChatSession = (sessionId: string) => {
+    if (!student) return;
+    setChatSessions(prev => {
+      const next = prev.filter(s => s.id !== sessionId);
+      try {
+        localStorage.setItem(`scholar_owl_chat_sessions_${student.mssv}`, JSON.stringify(next));
+      } catch {
+        // Ignore
+      }
+      return next;
+    });
+  };
+
+  const handleDownloadOfficialCalendar = () => {
+    const lines = [
+      'LỊCH HỌC VỤ CHÍNH THỨC // SCHOLAR OWL PORTAL (2025 - 2026)',
+      `Sinh viên: ${student?.name || 'N/A'} (${student?.mssv || 'N/A'})`,
+      `Ngày xuất: ${new Date().toLocaleDateString('vi-VN')}`,
+      '='.repeat(60),
+      ...dedupedCalendarEvents.map((ev, idx) => {
+        const d = new Date(ev.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        return `${idx + 1}. [${d}] ${ev.title.toUpperCase()} (${ev.type} / ${ev.priority})\n   Mô tả: ${ev.description || 'Không có ghi chú'}`;
+      })
+    ].join('\n\n');
+
+    const blob = new Blob([lines], { type: 'text/plain;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `academic_calendar_${student?.mssv || 'portal'}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showCyberToast({
+      type: 'success',
+      title: 'LỊCH HỌC VỤ // ĐÃ XUẤT',
+      message: `Đã tải xuống ${dedupedCalendarEvents.length} mốc sự kiện học vụ chính thức.`
+    });
+  };
+
   const handleSend = async (text: string = input) => {
     const messageText = text.trim();
     if (!messageText || isLoading) return;
 
     const userMsg: Message = { id: Date.now().toString(), role: 'user', content: messageText, timestamp: Date.now() };
-    setMessages(prev => [...prev, userMsg]);
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
     setInput('');
     setIsLoading(true);
 
@@ -1009,14 +1204,14 @@ export default function App() {
     }
 
     try {
-      const response = await getChatResponse([...messages, userMsg], student?.name);
-      const botMsg: Message = { id: (Date.now()+1).toString(), role: 'assistant', content: response, timestamp: Date.now() };
+      const response = await getChatResponse(nextMessages, student?.name);
+      const botMsg: Message = { id: (Date.now() + 1).toString(), role: 'assistant', content: response, timestamp: Date.now() };
       setMessages(prev => [...prev, botMsg]);
       if (student) {
         saveChatMessageToFirestore(student.mssv, 'assistant', response).catch(() => {});
       }
-    } catch (error) {
-      setMessages(prev => [...prev, { id: (Date.now()+1).toString(), role: 'assistant', content: "Có lỗi khi xử lý yêu cầu. Bạn hãy thử lại sau giây lát nhé.", timestamp: Date.now() }]);
+    } catch {
+      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'assistant', content: "Có lỗi khi xử lý yêu cầu. Bạn hãy thử lại sau giây lát nhé.", timestamp: Date.now() }]);
     } finally {
       setIsLoading(false);
     }
@@ -1032,6 +1227,14 @@ export default function App() {
     await logoutUser();
     setIsLoggedIn(false);
     setStudent(null);
+    setNotifications([]);
+    setMessages([]);
+    setFirestoreArchive([]);
+    setDashboardGreeting('');
+    setView('overview');
+    setSelectedCalendarEvent(null);
+    setActiveQuickModal(null);
+    setIsHistoryOpen(false);
     setLoginStep('login');
     setOtp('');
   };
@@ -1369,7 +1572,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-[#030509] text-gray-300 overflow-hidden font-sans">
+    <div className={`flex h-screen bg-[#030509] text-gray-300 overflow-hidden font-sans hud-shell ${!preferences.hudScanlines ? 'hud-no-scanlines' : ''}`}>
       {/* Sidebar Navigation - Transparent HUD Sidebar with Subtle Right Border */}
       <aside className="w-64 bg-transparent border-r border-white/10 flex flex-col shrink-0 select-none">
         <div className="p-6">
@@ -1386,8 +1589,8 @@ export default function App() {
              <NavButton num="02" icon={MessageSquare} label="AI SUPPORT" active={view === 'chat'} onClick={() => setView('chat')} className="nav-ai-chat-btn" />
              <NavButton num="03" icon={Stars} label="CÚ HỌC TẬP AZOTA" active={view === 'study-owl'} onClick={() => setView('study-owl')} className="study-owl-btn" />
              <NavButton num="04" icon={GraduationCap} label="DỰ BÁO GPA" active={view === 'academic'} onClick={() => setView('academic')} className="academic-gpa-btn" />
-             <NavButton num="05" icon={Bell} label="UPDATES" badge={notifications.filter(n => !n.isRead).length} onClick={() => setIsNotificationsOpen(true)} />
-             <NavButton num="06" icon={Settings} label="SETTINGS" />
+             <NavButton num="05" icon={Bell} label="UPDATES" badge={unreadNotificationsCount} onClick={() => setIsNotificationsOpen(true)} />
+             <NavButton num="06" icon={Settings} label="SETTINGS" active={view === 'settings'} onClick={() => setView('settings')} />
           </div>
         </div>
 
@@ -1459,9 +1662,15 @@ export default function App() {
 
         <header className="h-14 px-8 border-b border-white/10 flex items-center justify-between bg-[#070a10]/90 backdrop-blur-md z-10">
                <div className="flex items-center gap-3 flex-1">
-                 <div className="w-2 h-2 bg-[#00FFFF] rounded-none shadow-[0_0_8px_#00FFFF] animate-pulse" />
+                 <div className={`w-2 h-2 rounded-none animate-pulse ${aiHealth && !aiHealth.available ? 'bg-amber-400 shadow-[0_0_8px_#fbbf24]' : 'bg-[#00FFFF] shadow-[0_0_8px_#00FFFF]'}`} />
                  <span className="text-xs font-['Space_Grotesk'] font-bold text-white uppercase tracking-wider">NEURAL TERMINAL // AI SUPPORT</span>
-                 <div className="px-2 py-0.5 bg-[#CCFF00]/10 text-[#CCFF00] text-[9px] font-mono font-bold rounded-none uppercase tracking-widest border border-[#CCFF00]/30">ACTIVE STREAM</div>
+                 <div className={`px-2 py-0.5 text-[9px] font-mono font-bold rounded-none uppercase tracking-widest border ${
+                   aiHealth && !aiHealth.available
+                     ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                     : 'bg-[#CCFF00]/10 text-[#CCFF00] border-[#CCFF00]/30'
+                 }`}>
+                   {aiHealth && !aiHealth.available ? 'AI OFFLINE // CẦN GEMINI_API_KEY' : 'ACTIVE STREAM // GEMINI'}
+                 </div>
                </div>
                
                <div className="flex items-center gap-2">
@@ -1472,8 +1681,14 @@ export default function App() {
                   >
                     <FileText size={11} className="text-[#00FFFF]" /> EXPORT LOG
                   </button>
-                  <button className="saas-button-secondary py-1 px-3 text-[10px]">HISTORY</button>
-                  <button onClick={() => setMessages([])} className="saas-button-primary py-1 px-3 text-[10px]">+ NEW SESSION</button>
+                  <button 
+                    onClick={() => setIsHistoryOpen(true)}
+                    className="saas-button-secondary py-1 px-3 text-[10px] flex items-center gap-1.5"
+                  >
+                    <History size={11} className="text-[#CCFF00]" />
+                    HISTORY {chatSessions.length > 0 ? `(${chatSessions.length})` : ''}
+                  </button>
+                  <button onClick={handleNewChatSession} className="saas-button-primary py-1 px-3 text-[10px]">+ NEW SESSION</button>
                </div>
             </header>
 
@@ -1482,6 +1697,27 @@ export default function App() {
                <div className="crt-vignette-overlay" />
 
                <div className="max-w-3xl mx-auto relative z-10">
+                 {aiHealth && !aiHealth.available && (
+                   <div className="mb-6 p-3.5 bg-amber-500/10 border border-amber-500/40 flex items-start justify-between gap-3 text-xs font-mono">
+                     <div className="flex items-start gap-2.5 text-amber-300">
+                       <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                       <div>
+                         <p className="font-bold uppercase tracking-wider">Dịch vụ Gemini AI chưa sẵn sàng</p>
+                         <p className="text-[11px] text-amber-200/80 mt-0.5 font-sans">
+                           {aiHealth.reason || 'Máy chủ chưa được cấu hình biến môi trường GEMINI_API_KEY.'}
+                         </p>
+                       </div>
+                     </div>
+                     <button
+                       onClick={refreshAiHealth}
+                       disabled={isCheckingAi}
+                       className="px-2.5 py-1 border border-amber-400/50 text-amber-300 hover:bg-amber-400/10 text-[10px] uppercase shrink-0"
+                     >
+                       {isCheckingAi ? 'Đang kiểm...' : 'Kiểm tra lại'}
+                     </button>
+                   </div>
+                 )}
+
                  {messages.length === 0 ? (
                    <div className="h-full flex flex-col items-center justify-center py-20 text-center relative overflow-hidden">
                       <div className="relative z-10">
@@ -1489,13 +1725,13 @@ export default function App() {
                           <Logo size={32} />
                         </div>
                         <h2 className="text-2xl font-extrabold font-['Space_Grotesk'] text-white mb-2 tracking-tight uppercase">Neural Terminal Online</h2>
-                        <p className="text-xs font-mono text-slate-400 max-w-md mx-auto mb-10 leading-relaxed">System connected to SMUT academic datastream. Input query or select a preconfigured vector below.</p>
+                        <p className="text-xs font-mono text-slate-400 max-w-md mx-auto mb-10 leading-relaxed">Hệ thống kết nối dữ liệu học vụ &amp; Cú Owl AI. Nhập câu hỏi hoặc chọn gợi ý nhanh bên dưới.</p>
                         
                         <div className="flex flex-wrap justify-center gap-2">
-                          <QuickPrompt text="Next Exam Schedule" onClick={() => handleSend("When is my next exam?")} />
-                          <QuickPrompt text="GPA Forecast Model" onClick={() => handleSend("Analyze my GPA and forecast next semester")} />
-                          <QuickPrompt text="Digital Library Auth" onClick={() => handleSend("How can I access digital library resources?")} />
-                          <QuickPrompt text="Tuition Review Status" onClick={() => handleSend("Check my tuition payment status")} />
+                          <QuickPrompt text="Lịch thi & Bảo lưu" onClick={() => handleSend("Cho mình hỏi thủ tục bảo lưu và lịch thi học kỳ tới?")} />
+                          <QuickPrompt text="Phân tích & Dự báo GPA" onClick={() => handleSend("Phân tích điểm GPA hiện tại và gợi ý cách nâng điểm học kỳ tới")} />
+                          <QuickPrompt text="Đường đến Cơ sở 1" onClick={() => handleSend("Chỉ đường đến Cơ sở 1 và Phòng Đào tạo ở đâu?")} />
+                          <QuickPrompt text="Học phí & Tài chính" onClick={() => handleSend("Liên hệ Phòng Tài chính và thủ tục đóng học phí như thế nào?")} />
                         </div>
                       </div>
                    </div>
@@ -1633,6 +1869,279 @@ export default function App() {
                   </button>
                 </div>
                 <div className="w-48 h-48 opacity-10 pointer-events-none select-none bg-center bg-no-repeat bg-contain shrink-0" style={{ backgroundImage: `url('https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=2670&auto=format&fit=crop')` }} />
+              </div>
+            </div>
+          </div>
+        ) : view === 'settings' ? (
+          <div className="flex-1 overflow-y-auto px-8 py-8 space-y-8 no-scrollbar">
+            <div className="max-w-5xl mx-auto space-y-8">
+              <div className="flex flex-col md:flex-row md:items-end justify-between border-b border-white/10 pb-5 gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="w-1.5 h-1.5 bg-[#00FFFF] rounded-none shadow-[0_0_8px_#00FFFF]" />
+                    <p className="text-[10px] font-mono font-bold text-[#00FFFF] uppercase tracking-[0.25em]">SYSTEM CONFIG // HUD V2.5</p>
+                  </div>
+                  <h2 className="text-4xl font-extrabold font-['Space_Grotesk'] text-white tracking-tight">Cài Đặt Hệ Thống</h2>
+                </div>
+                <button
+                  onClick={() => {
+                    setTheme('dark');
+                    setPreferences(DEFAULT_PREFERENCES);
+                    showCyberToast({
+                      type: 'info',
+                      title: 'CÀI ĐẶT // KHÔI PHỤC',
+                      message: 'Đã đặt lại cấu hình giao diện và thông báo về mặc định.'
+                    });
+                  }}
+                  className="saas-button-secondary py-2 px-4 text-xs flex items-center gap-2"
+                >
+                  <RefreshCw size={13} /> Khôi phục mặc định
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* 1. Theme & Visual HUD */}
+                <div className="saas-card p-6 space-y-5">
+                  <div className="flex items-center gap-3 border-b border-white/10 pb-3">
+                    <div className="w-9 h-9 bg-[#CCFF00]/10 border border-[#CCFF00]/30 flex items-center justify-center text-[#CCFF00]">
+                      <Sliders size={18} />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-['Space_Grotesk'] font-bold text-white uppercase tracking-wider">Giao Diện &amp; Chủ Đề</h3>
+                      <p className="text-[10px] font-mono text-slate-400">Chế độ hiển thị &amp; hiệu ứng Neural HUD</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-3 bg-white/[0.02] border border-white/10">
+                      <div>
+                        <p className="text-xs font-bold text-white">Chế độ màu sắc (Theme)</p>
+                        <p className="text-[10px] text-slate-400">Chọn Dark HUD (Mặc định) hoặc Light HUD tương phản cao</p>
+                      </div>
+                      <div className="flex border border-white/15">
+                        <button
+                          onClick={() => setTheme('dark')}
+                          className={`px-3 py-1.5 text-[10px] font-mono font-bold uppercase flex items-center gap-1.5 transition-all ${
+                            theme === 'dark' ? 'bg-[#CCFF00] text-black' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Moon size={12} /> Dark
+                        </button>
+                        <button
+                          onClick={() => setTheme('light')}
+                          className={`px-3 py-1.5 text-[10px] font-mono font-bold uppercase flex items-center gap-1.5 transition-all ${
+                            theme === 'light' ? 'bg-[#CCFF00] text-black' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Sun size={12} /> Light
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 bg-white/[0.02] border border-white/10">
+                      <div>
+                        <p className="text-xs font-bold text-white">Hiệu ứng CRT Scanlines</p>
+                        <p className="text-[10px] text-slate-400">Đường quét màn hình trong cửa sổ AI Support</p>
+                      </div>
+                      <button
+                        onClick={() => setPreferences(p => ({ ...p, hudScanlines: !p.hudScanlines }))}
+                        className={`px-3 py-1 text-[10px] font-mono font-bold uppercase border transition-all ${
+                          preferences.hudScanlines
+                            ? 'bg-[#00FFFF]/15 text-[#00FFFF] border-[#00FFFF]/50'
+                            : 'bg-white/5 text-slate-400 border-white/10'
+                        }`}
+                      >
+                        {preferences.hudScanlines ? 'ĐANG BẬT' : 'ĐÃ TẮT'}
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      <button
+                        onClick={() => setIsIntroOpen(true)}
+                        className="saas-button-secondary py-1.5 px-3 text-[10px]"
+                      >
+                        Xem lại Intro 3 chương
+                      </button>
+                      <button
+                        onClick={() => { setView('overview'); setIsTourActive(true); }}
+                        className="saas-button-secondary py-1.5 px-3 text-[10px]"
+                      >
+                        Khởi chạy Tour HUD 6 bước
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Notifications & Alerts */}
+                <div className="saas-card p-6 space-y-5">
+                  <div className="flex items-center gap-3 border-b border-white/10 pb-3">
+                    <div className="w-9 h-9 bg-[#00FFFF]/10 border border-[#00FFFF]/30 flex items-center justify-center text-[#00FFFF]">
+                      <Bell size={18} />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-['Space_Grotesk'] font-bold text-white uppercase tracking-wider">Thông Báo &amp; Cảnh Báo</h3>
+                      <p className="text-[10px] font-mono text-slate-400">Quản lý thông báo học vụ và nhắc nhở lịch thi</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {[
+                      { key: 'deadlineAlerts' as const, title: 'Cảnh báo hạn chót học vụ', desc: 'Thông báo trước các mốc đóng học phí, bảo lưu, đăng ký tín chỉ' },
+                      { key: 'eventAlerts' as const, title: 'Thông báo hội thảo & sự kiện', desc: 'Nhận tin khi có Workshop AI hoặc hoạt động cấp khoa/trường' },
+                      { key: 'toastAlerts' as const, title: 'Hiển thị Cyber Toast HUD', desc: 'Hiển thị banner trạng thái nổi ở góc phải màn hình' }
+                    ].map(item => (
+                      <div key={item.key} className="flex items-center justify-between p-3 bg-white/[0.02] border border-white/10 gap-3">
+                        <div>
+                          <p className="text-xs font-bold text-white">{item.title}</p>
+                          <p className="text-[10px] text-slate-400">{item.desc}</p>
+                        </div>
+                        <button
+                          onClick={() => setPreferences(prev => ({ ...prev, [item.key]: !prev[item.key] }))}
+                          className={`px-3 py-1 text-[10px] font-mono font-bold uppercase border shrink-0 transition-all ${
+                            preferences[item.key]
+                              ? 'bg-[#CCFF00]/15 text-[#CCFF00] border-[#CCFF00]/50'
+                              : 'bg-white/5 text-slate-400 border-white/10'
+                          }`}
+                        >
+                          {preferences[item.key] ? 'BẬT' : 'TẮT'}
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => setIsNotificationsOpen(true)}
+                      className="w-full saas-button-secondary py-2 text-[10px] flex items-center justify-center gap-2"
+                    >
+                      <Bell size={12} /> Mở hộp thư thông báo ({unreadNotificationsCount} chưa đọc)
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. Account Information */}
+                <div className="saas-card p-6 space-y-5">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 bg-[#CCFF00]/10 border border-[#CCFF00]/30 flex items-center justify-center text-[#CCFF00]">
+                        <UserCircle size={18} />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-['Space_Grotesk'] font-bold text-white uppercase tracking-wider">Thông Tin Tài Khoản</h3>
+                        <p className="text-[10px] font-mono text-slate-400">Hồ sơ sinh viên đồng bộ Firestore</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleExportCSV}
+                      className="text-[10px] font-mono font-bold text-[#00FFFF] hover:underline flex items-center gap-1 uppercase"
+                    >
+                      <Download size={12} /> Xuất CSV
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="p-3 bg-white/[0.02] border border-white/10">
+                      <p className="text-[9px] font-mono text-slate-400 uppercase">Họ và tên</p>
+                      <p className="font-bold text-white mt-0.5">{student?.name}</p>
+                    </div>
+                    <div className="p-3 bg-white/[0.02] border border-white/10">
+                      <p className="text-[9px] font-mono text-slate-400 uppercase">MSSV</p>
+                      <p className="font-mono font-bold text-[#CCFF00] mt-0.5">{student?.mssv}</p>
+                    </div>
+                    <div className="p-3 bg-white/[0.02] border border-white/10">
+                      <p className="text-[9px] font-mono text-slate-400 uppercase">Ngành học</p>
+                      <p className="font-bold text-white mt-0.5">{student?.major || 'Sư phạm Toán học'}</p>
+                    </div>
+                    <div className="p-3 bg-white/[0.02] border border-white/10">
+                      <p className="text-[9px] font-mono text-slate-400 uppercase">GPA / Tín chỉ</p>
+                      <p className="font-mono font-bold text-[#00FFFF] mt-0.5">{(student?.gpa ?? 3.56).toFixed(2)} · {student?.credits ?? 42} TC</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-1">
+                    <p className="text-[10px] font-mono text-slate-400 uppercase">Cập nhật liên hệ nhanh</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        type="email"
+                        value={(editedStudent?.email ?? student?.email) || ''}
+                        onChange={(e) => setEditedStudent({ ...(editedStudent || student!), email: e.target.value })}
+                        placeholder="Email sinh viên"
+                        className="saas-input text-xs py-2"
+                      />
+                      <input
+                        type="text"
+                        value={(editedStudent?.phone ?? student?.phone) || ''}
+                        onChange={(e) => setEditedStudent({ ...(editedStudent || student!), phone: e.target.value })}
+                        placeholder="Số điện thoại"
+                        className="saas-input text-xs py-2"
+                      />
+                    </div>
+                    <div className="flex justify-end pt-1">
+                      <button
+                        onClick={async () => {
+                          const target = editedStudent || student;
+                          if (!target) return;
+                          await updateStudentProfile(target.mssv, { email: target.email, phone: target.phone });
+                          setStudent(target);
+                          showCyberToast({
+                            type: 'success',
+                            title: 'HỒ SƠ // ĐÃ LƯU',
+                            message: 'Đã cập nhật email & số điện thoại lên Firestore.'
+                          });
+                        }}
+                        className="saas-button-primary py-1.5 px-4 text-[10px] flex items-center gap-1.5"
+                      >
+                        <Save size={12} /> Lưu thông tin liên hệ
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. System & AI Backend Health */}
+                <div className="saas-card p-6 space-y-5">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 bg-[#00FFFF]/10 border border-[#00FFFF]/30 flex items-center justify-center text-[#00FFFF]">
+                        <Database size={18} />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-['Space_Grotesk'] font-bold text-white uppercase tracking-wider">Kết Nối AI &amp; Bảo Mật</h3>
+                        <p className="text-[10px] font-mono text-slate-400">Trạng thái máy chủ Gemini API &amp; Firebase</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={refreshAiHealth}
+                      disabled={isCheckingAi}
+                      className="text-[10px] font-mono font-bold text-[#CCFF00] hover:underline flex items-center gap-1 uppercase"
+                    >
+                      <RefreshCw size={11} className={isCheckingAi ? 'animate-spin' : ''} /> Kiểm tra
+                    </button>
+                  </div>
+
+                  <div className={`p-4 border ${aiHealth?.available ? 'bg-[#CCFF00]/5 border-[#CCFF00]/30' : 'bg-amber-500/10 border-amber-500/30'}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-mono font-bold uppercase text-white">Cú Owl AI Engine (Gemini)</span>
+                      <span className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 ${aiHealth?.available ? 'bg-[#CCFF00] text-black' : 'bg-amber-500/20 text-amber-300'}`}>
+                        {aiHealth === null ? 'CHECKING' : aiHealth.available ? 'ONLINE' : 'CHƯA KÍCH HOẠT'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                      {aiHealth?.available
+                        ? 'Máy chủ API đã sẵn sàng phục vụ Trợ lý Cú AI, tạo đề Azota và chấm điểm tự luận.'
+                        : aiHealth?.reason || 'Biến môi trường GEMINI_API_KEY chưa được thiết lập trên máy chủ Vercel / backend.'}
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-white/[0.02] border border-white/10 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-white">Quyền riêng tư &amp; Nghị định 13/2023/NĐ-CP</p>
+                      <p className="text-[10px] text-slate-400">Xem chính sách bảo vệ dữ liệu sinh viên</p>
+                    </div>
+                    <button
+                      onClick={() => setIsPrivacyOpen(true)}
+                      className="saas-button-secondary py-1.5 px-3 text-[10px]"
+                    >
+                      Xem chi tiết
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1797,13 +2306,22 @@ export default function App() {
                       QUICK ACTIONS
                     </h3>
                     <div className="space-y-2">
-                      <button className="w-full py-2.5 bg-white/[0.02] hover:bg-white/[0.06] rounded-none border border-white/10 hover:border-[#CCFF00] text-xs font-['Space_Grotesk'] font-bold text-white hover:text-[#CCFF00] transition-all text-left px-3 flex items-center justify-between group">
+                      <button 
+                        onClick={() => setActiveQuickModal('registration')}
+                        className="w-full py-2.5 bg-white/[0.02] hover:bg-white/[0.06] rounded-none border border-white/10 hover:border-[#CCFF00] text-xs font-['Space_Grotesk'] font-bold text-white hover:text-[#CCFF00] transition-all text-left px-3 flex items-center justify-between group"
+                      >
                         Đăng ký môn học <ChevronRight size={12} className="group-hover:translate-x-1 transition-transform" />
                       </button>
-                      <button className="w-full py-2.5 bg-white/[0.02] hover:bg-white/[0.06] rounded-none border border-white/10 hover:border-[#CCFF00] text-xs font-['Space_Grotesk'] font-bold text-white hover:text-[#CCFF00] transition-all text-left px-3 flex items-center justify-between group">
+                      <button 
+                        onClick={() => setActiveQuickModal('transcript')}
+                        className="w-full py-2.5 bg-white/[0.02] hover:bg-white/[0.06] rounded-none border border-white/10 hover:border-[#CCFF00] text-xs font-['Space_Grotesk'] font-bold text-white hover:text-[#CCFF00] transition-all text-left px-3 flex items-center justify-between group"
+                      >
                         Tra cứu bảng điểm <ChevronRight size={12} className="group-hover:translate-x-1 transition-transform" />
                       </button>
-                      <button className="w-full py-2.5 bg-white/[0.02] hover:bg-white/[0.06] rounded-none border border-white/10 hover:border-[#CCFF00] text-xs font-['Space_Grotesk'] font-bold text-white hover:text-[#CCFF00] transition-all text-left px-3 flex items-center justify-between group">
+                      <button 
+                        onClick={() => setActiveQuickModal('certificates')}
+                        className="w-full py-2.5 bg-white/[0.02] hover:bg-white/[0.06] rounded-none border border-white/10 hover:border-[#CCFF00] text-xs font-['Space_Grotesk'] font-bold text-white hover:text-[#CCFF00] transition-all text-left px-3 flex items-center justify-between group"
+                      >
                         Chứng chỉ học tập <ChevronRight size={12} className="group-hover:translate-x-1 transition-transform" />
                       </button>
                     </div>
@@ -1814,7 +2332,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Grid 2: Academic Calendar (Major Feature) */}
+              {/* Grid 2: Academic Calendar (Single Deduplicated Block) */}
               <div className="saas-card bg-[#070a10] border border-white/10 overflow-hidden calendar-widget-card">
                 <div className="p-5 border-b border-white/10 flex items-center justify-between bg-white/[0.01]">
                    <div className="flex items-center gap-3">
@@ -1823,22 +2341,40 @@ export default function App() {
                      </div>
                      <div>
                        <h3 className="text-xs font-['JetBrains_Mono'] font-bold text-white uppercase tracking-[0.2em]">ACADEMIC CALENDAR</h3>
-                       <p className="text-[10px] font-mono text-slate-400">Important Deadlines &amp; Milestone Events</p>
+                       <p className="text-[10px] font-mono text-slate-400">Important Deadlines &amp; Milestone Events ({displayedCalendarEvents.length})</p>
                      </div>
                    </div>
                    <div className="flex items-center gap-2">
-                     <button className="px-2 py-1 bg-white/[0.03] border border-white/10 rounded-none text-[9px] font-mono font-bold uppercase tracking-wider text-white hover:border-[#CCFF00] hover:text-[#CCFF00]">Upcoming</button>
-                     <button className="px-2 py-1 bg-white/[0.03] border border-white/10 rounded-none text-[9px] font-mono font-bold uppercase tracking-wider text-slate-500 hover:text-white">Full Year</button>
+                     <button 
+                       onClick={() => setCalendarFilter('upcoming')}
+                       className={`px-2 py-1 border rounded-none text-[9px] font-mono font-bold uppercase tracking-wider transition-colors ${
+                         calendarFilter === 'upcoming'
+                           ? 'bg-[#CCFF00]/15 border-[#CCFF00] text-[#CCFF00]'
+                           : 'bg-white/[0.03] border-white/10 text-slate-400 hover:text-white'
+                       }`}
+                     >
+                       Upcoming
+                     </button>
+                     <button 
+                       onClick={() => setCalendarFilter('full')}
+                       className={`px-2 py-1 border rounded-none text-[9px] font-mono font-bold uppercase tracking-wider transition-colors ${
+                         calendarFilter === 'full'
+                           ? 'bg-[#CCFF00]/15 border-[#CCFF00] text-[#CCFF00]'
+                           : 'bg-white/[0.03] border-white/10 text-slate-400 hover:text-white'
+                       }`}
+                     >
+                       Full Year
+                     </button>
                    </div>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-white/10">
-                  {calendarEvents.length === 0 ? (
+                  {displayedCalendarEvents.length === 0 ? (
                     <div className="col-span-4 py-20 text-center">
                       <p className="text-xs font-mono text-slate-500">Syncing academic schedule...</p>
                     </div>
                   ) : (
-                    calendarEvents.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(0, 4).map((event) => (
+                    displayedCalendarEvents.map((event) => (
                       <div key={event.id} className="p-5 hover:bg-white/[0.02] transition-colors relative group overflow-hidden">
                         <div className="mb-3">
                            <span className={`text-[8px] font-mono font-bold uppercase tracking-[0.2em] px-2 py-0.5 rounded-none border ${
@@ -1861,7 +2397,10 @@ export default function App() {
                         </div>
 
                         <div className="mt-4">
-                           <button className="text-[9px] font-mono font-bold text-[#CCFF00] uppercase flex items-center gap-1 hover:gap-2 transition-all">
+                           <button 
+                             onClick={() => setSelectedCalendarEvent(event)}
+                             className="text-[9px] font-mono font-bold text-[#CCFF00] uppercase flex items-center gap-1 hover:gap-2 transition-all cursor-pointer"
+                           >
                              View Details <ChevronRight size={10} />
                            </button>
                         </div>
@@ -1875,8 +2414,11 @@ export default function App() {
                 </div>
                 
                 <div className="p-3 bg-white/[0.01] border-t border-white/10 text-center">
-                   <button className="text-[9px] font-mono font-bold text-slate-400 uppercase hover:text-[#CCFF00] transition-colors tracking-widest">
-                     Download Official Calendar (PDF)
+                   <button 
+                     onClick={handleDownloadOfficialCalendar}
+                     className="text-[9px] font-mono font-bold text-slate-400 uppercase hover:text-[#CCFF00] transition-colors tracking-widest cursor-pointer"
+                   >
+                     Download Official Calendar (TXT/PDF)
                    </button>
                 </div>
               </div>
@@ -1886,7 +2428,7 @@ export default function App() {
                  <div className="saas-card p-6 bg-[#070a10] border border-white/10">
                    <h3 className="text-xs font-['JetBrains_Mono'] font-bold text-white uppercase tracking-[0.2em] mb-6 flex items-center justify-between">
                      <span>CAMPUS DISPATCHES</span>
-                     <button className="text-[9px] font-mono font-bold text-[#00FFFF] lowercase hover:underline">view all</button>
+                     <button onClick={() => setIsNotificationsOpen(true)} className="text-[9px] font-mono font-bold text-[#00FFFF] lowercase hover:underline">view all</button>
                    </h3>
                    <div className="space-y-4">
                       <div className="flex gap-4 group cursor-pointer border-b border-white/10 pb-4 last:border-0 last:pb-0">
@@ -2186,10 +2728,6 @@ export default function App() {
               </div>
             </div>
 
-            <div className="pt-4 border-t border-white/10">
-               <CalendarWidget events={calendarEvents} />
-            </div>
-
             {/* Digital Pass / QR */}
             <div className="pt-4 border-t border-white/10">
                <div className="p-5 bg-[#070a10] border border-white/10 rounded-none flex flex-col items-center">
@@ -2246,6 +2784,375 @@ export default function App() {
                 >
                   LƯU THAY ĐỔI
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Chat History Modal (Bug 7) */}
+      <AnimatePresence>
+        {isHistoryOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#070a10] border border-white/20 w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl"
+            >
+              <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/[0.02]">
+                <div className="flex items-center gap-2.5">
+                  <History size={16} className="text-[#CCFF00]" />
+                  <div>
+                    <h3 className="text-xs font-mono font-bold text-white uppercase tracking-widest">LỊCH SỬ TRÒ CHUYỆN CÚ OWL AI</h3>
+                    <p className="text-[10px] font-mono text-slate-400">Các phiên tư vấn học vụ đã lưu theo MSSV {student?.mssv}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsHistoryOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-white border border-white/10"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar">
+                {chatSessions.length === 0 && firestoreArchive.length === 0 ? (
+                  <div className="py-12 text-center space-y-2">
+                    <MessageSquare size={24} className="mx-auto text-slate-600" />
+                    <p className="text-xs font-mono text-slate-400 uppercase">Chưa có phiên hội thoại nào được lưu</p>
+                    <p className="text-[11px] text-slate-500">Hãy đặt câu hỏi cho Cú Owl AI; hệ thống sẽ tự động lưu lịch sử tại đây.</p>
+                  </div>
+                ) : (
+                  <>
+                    {chatSessions.map(session => {
+                      const isCurrent = session.id === activeSessionId;
+                      return (
+                        <div
+                          key={session.id}
+                          className={`p-3.5 border transition-all flex items-start justify-between gap-3 ${
+                            isCurrent ? 'bg-[#CCFF00]/5 border-[#CCFF00]/40' : 'bg-white/[0.02] border-white/10 hover:border-white/30'
+                          }`}
+                        >
+                          <button
+                            onClick={() => handleLoadChatSession(session)}
+                            className="flex-1 text-left min-w-0 cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs font-bold text-white truncate">{session.title}</span>
+                              {isCurrent && (
+                                <span className="px-1.5 py-0.5 text-[8px] font-mono font-bold bg-[#CCFF00] text-black uppercase">ĐANG MỞ</span>
+                              )}
+                            </div>
+                            <p className="text-[10px] font-mono text-slate-400">
+                              {new Date(session.updatedAt).toLocaleString('vi-VN')} · {session.messages.length} tin nhắn
+                            </p>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteChatSession(session.id)}
+                            className="p-1.5 text-slate-500 hover:text-red-400 border border-transparent hover:border-red-500/30 transition-colors"
+                            title="Xóa phiên này"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      );
+                    })}
+
+                    {firestoreArchive.length > 0 && (
+                      <div className="pt-3 border-t border-white/10">
+                        <button
+                          onClick={() => {
+                            skipNextFirestoreAutoLoadRef.current = true;
+                            setActiveSessionId(`cloud_${Date.now()}`);
+                            setMessages(firestoreArchive);
+                            setIsHistoryOpen(false);
+                          }}
+                          className="w-full p-3 bg-[#00FFFF]/5 hover:bg-[#00FFFF]/10 border border-[#00FFFF]/30 text-left flex items-center justify-between transition-all"
+                        >
+                          <div>
+                            <p className="text-xs font-mono font-bold text-[#00FFFF] uppercase">Nhật ký đồng bộ Cloud Firestore</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">{firestoreArchive.length} tin nhắn lưu trên đám mây</p>
+                          </div>
+                          <ChevronRight size={14} className="text-[#00FFFF]" />
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div className="p-3 border-t border-white/10 bg-white/[0.01] flex justify-between items-center">
+                <button
+                  onClick={() => {
+                    setIsHistoryOpen(false);
+                    handleNewChatSession();
+                  }}
+                  className="saas-button-primary py-1.5 px-3 text-[10px]"
+                >
+                  + Tạo phiên chat mới
+                </button>
+                <button onClick={() => setIsHistoryOpen(false)} className="saas-button-secondary py-1.5 px-3 text-[10px]">
+                  Đóng
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Calendar Event Details Modal (Bug 4) */}
+      <AnimatePresence>
+        {selectedCalendarEvent && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#070a10] border border-[#00FFFF]/40 w-full max-w-md shadow-2xl overflow-hidden"
+            >
+              <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/[0.02]">
+                <div className="flex items-center gap-2">
+                  <Calendar size={16} className="text-[#00FFFF]" />
+                  <span className="text-xs font-mono font-bold text-white uppercase tracking-widest">CHI TIẾT SỰ KIỆN HỌC VỤ</span>
+                </div>
+                <button
+                  onClick={() => setSelectedCalendarEvent(null)}
+                  className="p-1.5 text-slate-400 hover:text-white border border-white/10"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`text-[9px] font-mono font-bold uppercase tracking-widest px-2 py-0.5 border ${
+                    selectedCalendarEvent.type === 'exam' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
+                    selectedCalendarEvent.type === 'registration' ? 'bg-[#00FFFF]/10 text-[#00FFFF] border-[#00FFFF]/30' :
+                    selectedCalendarEvent.type === 'holiday' ? 'bg-[#CCFF00]/10 text-[#CCFF00] border-[#CCFF00]/30' :
+                    'bg-white/10 text-white border-white/20'
+                  }`}>
+                    {selectedCalendarEvent.type}
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-400 uppercase">
+                    Mức ưu tiên: <strong className={selectedCalendarEvent.priority === 'high' ? 'text-red-400' : 'text-[#CCFF00]'}>{selectedCalendarEvent.priority}</strong>
+                  </span>
+                </div>
+
+                <h3 className="text-lg font-bold font-['Space_Grotesk'] text-white">{selectedCalendarEvent.title}</h3>
+
+                <div className="p-3 bg-white/[0.02] border border-white/10 flex items-center justify-between text-xs font-mono">
+                  <span className="text-slate-400">Thời gian:</span>
+                  <span className="text-[#00FFFF] font-bold">
+                    {new Date(selectedCalendarEvent.date).toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {selectedCalendarEvent.description || 'Thông báo lịch trình chính thức từ Phòng Đào tạo.'}
+                </p>
+
+                <div className="pt-2 flex gap-2">
+                  <button
+                    onClick={() => {
+                      const ev = selectedCalendarEvent;
+                      setSelectedCalendarEvent(null);
+                      setView('chat');
+                      handleSend(`Hãy tư vấn chi tiết và nhắc nhở chuẩn bị cho sự kiện "${ev.title}" vào ngày ${new Date(ev.date).toLocaleDateString('vi-VN')}.`);
+                    }}
+                    className="flex-1 saas-button-primary py-2 text-[10px] flex items-center justify-center gap-1.5"
+                  >
+                    <Sparkles size={12} /> Hỏi Cú Owl AI về sự kiện này
+                  </button>
+                  <button
+                    onClick={() => setSelectedCalendarEvent(null)}
+                    className="saas-button-secondary py-2 px-4 text-[10px]"
+                  >
+                    Đóng
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Overview Quick Actions Modal (Bug 3) */}
+      <AnimatePresence>
+        {activeQuickModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#070a10] border border-white/20 w-full max-w-xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
+            >
+              <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/[0.02]">
+                <div className="flex items-center gap-2.5">
+                  {activeQuickModal === 'registration' && <BookMarked size={16} className="text-[#CCFF00]" />}
+                  {activeQuickModal === 'transcript' && <GraduationCap size={16} className="text-[#00FFFF]" />}
+                  {activeQuickModal === 'certificates' && <Award size={16} className="text-[#CCFF00]" />}
+                  <h3 className="text-xs font-mono font-bold text-white uppercase tracking-widest">
+                    {activeQuickModal === 'registration' && 'ĐĂNG KÝ MÔN HỌC // HK1 2026-2027'}
+                    {activeQuickModal === 'transcript' && 'TRA CỨU BẢNG ĐIỂM TÍCH LŨY'}
+                    {activeQuickModal === 'certificates' && 'CHỨNG CHỈ & XÁC NHẬN HỌC TẬP'}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setActiveQuickModal(null)}
+                  className="p-1.5 text-slate-400 hover:text-white border border-white/10"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-4 no-scrollbar">
+                {activeQuickModal === 'registration' && (
+                  <>
+                    <div className="p-3 bg-[#00FFFF]/5 border border-[#00FFFF]/30 text-[11px] text-slate-300 leading-relaxed">
+                      <strong className="text-[#00FFFF]">Cổng xem trước kế hoạch đăng ký (Coming Soon):</strong> Cổng đăng ký tín chỉ chính thức mở từ <span className="font-mono text-white">01/07/2026</span>. Bạn có thể chọn trước học phần dự kiến bên dưới.
+                    </div>
+                    <div className="space-y-2">
+                      {REGISTRATION_CATALOG.map(course => {
+                        const checked = selectedRegCodes.includes(course.code);
+                        return (
+                          <div
+                            key={course.code}
+                            onClick={() => setSelectedRegCodes(prev => prev.includes(course.code) ? prev.filter(c => c !== course.code) : [...prev, course.code])}
+                            className={`p-3 border cursor-pointer transition-all flex items-center justify-between gap-3 ${
+                              checked ? 'bg-[#CCFF00]/10 border-[#CCFF00]/50' : 'bg-white/[0.02] border-white/10 hover:border-white/30'
+                            }`}
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-mono font-bold text-[#00FFFF]">{course.code}</span>
+                                <span className="text-xs font-bold text-white">{course.name}</span>
+                              </div>
+                              <p className="text-[10px] font-mono text-slate-400 mt-1">{course.schedule} · Sĩ số: {course.slots}</p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="text-xs font-mono font-bold text-[#CCFF00] block">{course.credits} TC</span>
+                              <span className="text-[9px] font-mono text-slate-400">{checked ? 'ĐÃ CHỌN' : course.status}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-white/10 text-xs font-mono">
+                      <span className="text-slate-400">Tổng tín chỉ dự kiến:</span>
+                      <span className="text-[#CCFF00] font-bold">
+                        {REGISTRATION_CATALOG.filter(c => selectedRegCodes.includes(c.code)).reduce((s, c) => s + c.credits, 0)} Tín chỉ
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        showCyberToast({
+                          type: 'success',
+                          title: 'KẾ HOẠCH TÍN CHỈ // ĐÃ LƯU NHÁP',
+                          message: `Đã lưu danh sách dự kiến (${selectedRegCodes.length} học phần). Cổng nộp chính thức mở ngày 01/07/2026.`
+                        });
+                        setActiveQuickModal(null);
+                      }}
+                      className="w-full saas-button-primary py-2.5 text-xs"
+                    >
+                      Lưu kế hoạch đăng ký nháp
+                    </button>
+                  </>
+                )}
+
+                {activeQuickModal === 'transcript' && (
+                  <>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="p-3 bg-white/[0.02] border border-white/10">
+                        <p className="text-[9px] font-mono text-slate-400 uppercase">CGPA Hiện tại</p>
+                        <p className="text-2xl font-mono font-extrabold text-[#CCFF00] mt-1">{(student?.gpa ?? 3.56).toFixed(2)}</p>
+                      </div>
+                      <div className="p-3 bg-white/[0.02] border border-white/10">
+                        <p className="text-[9px] font-mono text-slate-400 uppercase">Tín chỉ tích lũy</p>
+                        <p className="text-2xl font-mono font-extrabold text-white mt-1">{student?.credits ?? 42}</p>
+                      </div>
+                      <div className="p-3 bg-white/[0.02] border border-white/10">
+                        <p className="text-[9px] font-mono text-slate-400 uppercase">Xếp loại</p>
+                        <p className="text-sm font-mono font-bold text-[#00FFFF] mt-2">GIỎI / DISTINCTION</p>
+                      </div>
+                    </div>
+
+                    <div className="border border-white/10 divide-y divide-white/10">
+                      <div className="px-3 py-2 bg-white/[0.03] grid grid-cols-3 text-[10px] font-mono font-bold text-slate-400 uppercase">
+                        <span>Học kỳ</span>
+                        <span className="text-center">GPA Học kỳ</span>
+                        <span className="text-right">Trạng thái</span>
+                      </div>
+                      {SMUT_DATA.gpaHistory.map(row => (
+                        <div key={row.semester} className="px-3 py-2.5 grid grid-cols-3 text-xs items-center">
+                          <span className="font-mono text-white">{row.semester}</span>
+                          <span className="font-mono font-bold text-[#CCFF00] text-center">{row.gpa.toFixed(2)}</span>
+                          <span className="text-[10px] font-mono text-[#00FFFF] text-right">HOÀN THÀNH</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setActiveQuickModal(null);
+                          setIsGpaModalOpen(true);
+                        }}
+                        className="flex-1 saas-button-primary py-2 text-xs flex items-center justify-center gap-1.5"
+                      >
+                        <Calculator size={13} /> Mở Máy tính Dự báo GPA
+                      </button>
+                      <button
+                        onClick={() => setActiveQuickModal(null)}
+                        className="saas-button-secondary py-2 px-4 text-xs"
+                      >
+                        Đóng
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {activeQuickModal === 'certificates' && (
+                  <>
+                    <div className="p-4 bg-[#CCFF00]/5 border border-[#CCFF00]/30 flex items-start gap-3">
+                      <FileCheck2 size={20} className="text-[#CCFF00] shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-bold text-white">Thẻ Sinh Viên Số (Digital Pass)</p>
+                        <p className="text-[11px] text-slate-300 mt-0.5">
+                          Hiệu lực xác thực: <span className="font-mono text-[#CCFF00]">2024 - 2028 // VERIFIED</span> · MSSV {student?.mssv}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      <div className="p-3 bg-white/[0.02] border border-white/10 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-bold text-white">Hồ sơ Minh chứng KPI Sinh viên (18 tiêu chí)</p>
+                          <p className="text-[10px] text-slate-400">Điểm ước tính hiện tại: 55 / 100 điểm rèn luyện &amp; học thuật</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setActiveQuickModal(null);
+                            setView('study-owl');
+                          }}
+                          className="saas-button-primary py-1.5 px-3 text-[10px] shrink-0"
+                        >
+                          Mở Cổng KPI
+                        </button>
+                      </div>
+
+                      <div className="p-3 bg-white/[0.02] border border-white/10 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-bold text-white">Giấy xác nhận sinh viên &amp; Chứng chỉ ký số PDF</p>
+                          <p className="text-[10px] text-amber-300/90">Sắp ra mắt (Coming Soon) · Liên hệ Phòng CTSV P.102 Nhà A1 khi cần bản cứng</p>
+                        </div>
+                        <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-white/5 border border-white/15 text-slate-400 uppercase shrink-0">
+                          COMING SOON
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </motion.div>
           </div>

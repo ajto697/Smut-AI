@@ -14,15 +14,73 @@
 }
 
 :root.light {
-  --brand-bg: #030509;
-  --brand-card: #070a10;
-  --brand-border: rgba(255, 255, 255, 0.08);
-  --brand-text-white: #ffffff;
-  --brand-text-primary: #ffffff;
-  --brand-text-secondary: #94a3b8;
+  --brand-bg: #f1f5f9;
+  --brand-card: #ffffff;
+  --brand-border: rgba(15, 23, 42, 0.12);
+  --brand-text-white: #0f172a;
+  --brand-text-primary: #0f172a;
+  --brand-text-secondary: #334155;
   --brand-text-muted: #64748b;
-  --brand-bg-white-ops: rgba(255, 255, 255, 0.03);
-  --brand-bg-white-ops-hover: rgba(255, 255, 255, 0.07);
+  --brand-bg-white-ops: rgba(15, 23, 42, 0.04);
+  --brand-bg-white-ops-hover: rgba(15, 23, 42, 0.08);
+}
+
+:root.light body {
+  background-color: #f1f5f9;
+  color: #1e293b;
+}
+
+:root.light .hud-shell {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+:root.light .hud-shell main {
+  background-color: #f8fafc !important;
+}
+
+:root.light .hud-shell aside {
+  background-color: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+:root.light .hud-shell .saas-card,
+:root.light .hud-shell header {
+  background-color: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+:root.light .hud-shell .text-white {
+  color: #0f172a !important;
+}
+
+:root.light .hud-shell .text-slate-300,
+:root.light .hud-shell .text-gray-300 {
+  color: #334155 !important;
+}
+
+:root.light .hud-shell .text-slate-400,
+:root.light .hud-shell .text-slate-500 {
+  color: #475569 !important;
+}
+
+:root.light .hud-shell .border-white\/10,
+:root.light .hud-shell .border-white\/15,
+:root.light .hud-shell .border-white\/20 {
+  border-color: rgba(15, 23, 42, 0.14) !important;
+}
+
+:root.light .hud-shell .text-\[\#CCFF00\] {
+  color: #15803d !important;
+}
+
+:root.light .hud-shell .text-\[\#00FFFF\] {
+  color: #0284c7 !important;
+}
+
+:root.light .hud-shell .bg-\[\#CCFF00\] {
+  background-color: #84cc16 !important;
+  color: #0f172a !important;
 }
 
 @theme {
@@ -99,6 +157,12 @@
 /* CRT Terminal Scanlines Effect */
 .crt-terminal-scanlines {
   position: relative;
+}
+
+.hud-no-scanlines .crt-terminal-scanlines::before,
+.hud-no-scanlines .crt-terminal-scanlines::after,
+.hud-no-scanlines .crt-vignette-overlay {
+  display: none !important;
 }
 
 .crt-terminal-scanlines::before {

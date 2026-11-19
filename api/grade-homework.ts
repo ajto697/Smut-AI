@@ -1,46 +1,56 @@
-import { GoogleGenAI } from "@google/genai";
+import { AiServiceError, generateAIContent, setCorsHeaders, truncateText } from "./_lib/gemini";
 
 export default async function handler(req: any, res: any) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
+  setCorsHeaders(res);
   if (req.method === "OPTIONS") {
-    res.status(200).end();
-    return;
+    return res.status(200).end();
   }
-
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return res.status(200).json({
-      feedback: "### 🦉 Chế độ phản hồi nhanh\nBài làm đã được ghi nhận. Hãy cấu hình `GEMINI_API_KEY` trên Vercel để nhận chi tiết thang điểm và đánh giá nâng cao!"
-    });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: true, code: "METHOD_NOT_ALLOWED", message: "Method not allowed" });
   }
 
   try {
-    const { homeworkText, assignmentTitle } = req.body || {};
-    const ai = new GoogleGenAI({ apiKey });
+    const { homeworkText = "", assignmentTitle = "Bài tập học vụ", studentName } = req.body || {};
+    if (!homeworkText.toString().trim()) {
+      return res.status(400).json({
+        error: true,
+        code: "EMPTY_HOMEWORK",
+        message: "Vui lòng nhập hoặc tải lên nội dung bài làm trước khi chấm điểm."
+      });
+    }
+
+    const studentContext = studentName ? `Bài nộp của sinh viên: ${studentName}. ` : "";
+    const truncatedHomework = truncateText(homeworkText.toString(), 25000);
     const prompt = `Chủ đề bài tập: "${assignmentTitle}".
 Nội dung bài làm:
-"${homeworkText}"
+"${truncatedHomework}"
 
 Hãy đóng vai trợ lý cú học thuật "Scholar Owl" (Trợ lý Azota SMUT) cực kỳ tận tâm, thông minh và tràn đầy năng lượng.
 Hãy nhận xét, chấm điểm bài làm của sinh viên trên thang điểm 10 theo format sau:
 - Điểm số (thang 10, dạng số e.g. 8.5/10) và lời khen/nhận xét tổng quan.
 - Những điểm làm tốt.
 - Những điểm cần cải thiện, kèm gợi ý sửa đổi chi tiết.
-- Lời động viên học tập truyền cảm hứng.
-Trả lời bằng tiếng Việt, trình bày Markdown đẹp mắt.`;
+- Lời động viên học tập truyền cảm hứng đại diện cho Cú trợ lý học tập.
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt
+Trả lời bằng tiếng Việt, trình bày Markdown đẹp mắt với một vài emoji dễ thương biểu thị tính năng trợ lý học tập.`;
+
+    const response = await generateAIContent({
+      contents: prompt,
+      config: {
+        systemInstruction: studentContext + "Bạn là Cú Trợ Lý Học Tập (Scholar Owl) của trường SMUT."
+      },
+      timeoutMs: 20000
     });
 
-    return res.status(200).json({ feedback: response.text || "Đã chấm điểm bài làm." });
+    return res.status(200).json({ feedback: response.text });
   } catch (err: any) {
-    return res.status(200).json({
-      feedback: "### 🦉 Phản hồi sơ bộ từ Cú Học Tập\nBài làm của bạn đã được tiếp nhận. Máy chủ AI đang bận xử lý, bạn vui lòng kiểm tra lại sau!"
+    const status = err instanceof AiServiceError ? err.statusCode : 500;
+    const code = err instanceof AiServiceError ? err.errorCode : "AI_GRADE_ERROR";
+    console.error("Vercel /api/grade-homework error:", code, err?.message || err);
+    return res.status(status).json({
+      error: true,
+      code,
+      message: err?.message || "Không thể chấm điểm bài làm lúc này."
     });
   }
 }

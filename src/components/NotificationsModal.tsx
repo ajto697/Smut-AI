@@ -145,11 +145,17 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                       </h4>
                     </div>
 
-                    <div className="flex items-center gap-1 text-[9px] font-mono text-slate-400 shrink-0">
+                    <div className="flex items-center gap-1.5 text-[9px] font-mono text-slate-400 shrink-0">
                       <Clock size={10} />
                       <span>{new Date(notif.timestamp).toLocaleDateString('vi-VN')}</span>
-                      {!notif.isRead && (
-                        <span className="w-1.5 h-1.5 bg-[#CCFF00] rounded-none ml-1 shadow-[0_0_6px_#CCFF00]" />
+                      {!notif.isRead ? (
+                        <span className="px-1.5 py-0.5 bg-[#CCFF00]/15 text-[#CCFF00] border border-[#CCFF00]/40 text-[8px] font-bold uppercase tracking-wider ml-1">
+                          CHƯA ĐỌC
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 bg-white/5 text-slate-500 border border-white/10 text-[8px] font-bold uppercase tracking-wider ml-1">
+                          ĐÃ ĐỌC
+                        </span>
                       )}
                     </div>
                   </div>
